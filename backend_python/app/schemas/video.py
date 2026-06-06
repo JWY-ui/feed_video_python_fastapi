@@ -1,8 +1,9 @@
-"""视频模块——Pydantic 请求/响应模型"""
+# -*- coding: utf-8 -*-
+"""Video module -- Pydantic request/response models."""
 from pydantic import BaseModel, Field
 
 
-# ─── 视频发布 ───
+# --- Video publish ---
 class PublishVideoRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: str = ""
@@ -11,7 +12,7 @@ class PublishVideoRequest(BaseModel):
 
 
 class VideoInfo(BaseModel):
-    """视频详情返回"""
+    """Video detail response."""
     id: int
     author_id: int
     username: str
@@ -19,7 +20,7 @@ class VideoInfo(BaseModel):
     description: str | None = None
     play_url: str
     cover_url: str
-    create_time: str  # ISO 格式时间字符串
+    create_time: str  # ISO format time string
     likes_count: int
     popularity: int
 
@@ -32,10 +33,10 @@ class GetDetailRequest(BaseModel):
     id: int
 
 
-# ─── 上传响应 ───
+# --- Upload responses ---
 class UploadResponse(BaseModel):
     url: str
-    play_url: str | None = None  # uploadCover 不返回 play_url
+    play_url: str | None = None  # uploadCover does not return play_url
 
 
 class CoverUploadResponse(BaseModel):
@@ -43,7 +44,7 @@ class CoverUploadResponse(BaseModel):
     cover_url: str
 
 
-# ─── 分片上传 ───
+# --- Chunked upload ---
 class InitChunkRequest(BaseModel):
     filename: str = Field(..., min_length=1)
     file_size: int = Field(..., gt=0)
@@ -54,7 +55,7 @@ class InitChunkRequest(BaseModel):
 
 class InitChunkResponse(BaseModel):
     upload_id: str
-    uploaded_chunks: list[int]  # 已上传的分片序号（断点续传用）
+    uploaded_chunks: list[int]  # Already uploaded chunk indices (for resume)
 
 
 class ChunkStatusRequest(BaseModel):

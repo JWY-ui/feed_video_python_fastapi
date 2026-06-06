@@ -1,21 +1,22 @@
+# -*- coding: utf-8 -*-
 """
-通知表 (notifications)
+Notification table (notifications)
 
-通知由互动事件触发：
-  - like     : 有人点赞了你的视频 → type=like,    target_id=视频ID
-  - comment  : 有人评论了你的视频 → type=comment, target_id=视频ID
-  - follow   : 有人关注了你       → type=follow,  target_id=关注者ID
-  - mention  : 有人在评论中 @了你 → type=mention, target_id=视频ID
+Notifications are triggered by interaction events:
+  - like     : someone liked your video     -> type=like,    target_id=video_id
+  - comment  : someone commented on your video -> type=comment, target_id=video_id
+  - follow   : someone followed you         -> type=follow,  target_id=follower_id
+  - mention  : someone @mentioned you in a comment -> type=mention, target_id=video_id
 
-查询模式：
-  - 通知列表：SELECT WHERE recipient_id = ? ORDER BY created_at DESC LIMIT 50
-    recipient_id 有索引，走索引查询（不需要全表扫描）
-  - 未读计数：SELECT COUNT WHERE recipient_id = ? AND is_read = false
-  - 标记已读：UPDATE WHERE recipient_id = ? AND id = ?（单条）/ WHERE recipient_id = ?（全部）
+Query patterns:
+  - Notification list: SELECT WHERE recipient_id = ? ORDER BY created_at DESC LIMIT 50
+    recipient_id has index, uses index scan (no full table scan)
+  - Unread count: SELECT COUNT WHERE recipient_id = ? AND is_read = false
+  - Mark read: UPDATE WHERE recipient_id = ? AND id = ? (single) / WHERE recipient_id = ? (all)
 
-推送机制：
-  通知写入 MySQL 后，通过 SSE 推送给在线用户。
-  用户不在线也不丢——下次打开列表时从 MySQL 加载。
+Push mechanism:
+  Notifications are written to MySQL, then pushed to online users via SSE.
+  Offline users don't miss anything -- load from MySQL when they open the list.
 """
 from datetime import datetime
 
@@ -29,18 +30,18 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # 接收者——通知给谁看。有索引，列表查询的核心过滤字段
+    # Recipient -- who receives this notification. Indexed, core filter for list queries.
     recipient_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    # 发送者——谁触发了通知（点赞/评论/关注的人）
+    # Sender -- who triggered the notification (the person who liked/commented/followed).
     sender_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    # 通知类型：like / comment / follow / mention
+    # Notification type: like / comment / follow / mention.
     type: Mapped[str] = mapped_column(String(50), nullable=False)
-    # 关联目标 ID。如视频 ID（like/comment/mention）或用户 ID（follow）
-    # 前端点击通知时跳转到对应页面
+    # Target ID. e.g. video_id (like/comment/mention) or user_id (follow).
+    # Frontend uses this to navigate to the relevant page on click.
     target_id: Mapped[int] = mapped_column(Integer, default=0)
-    # 通知文案。如 "tom 点赞了你的视频"
+    # Notification text. e.g. "tom liked your video".
     content: Mapped[str] = mapped_column(String(255), default="")
-    # 是否已读。标记已读接口会批量更新此字段
+    # Whether read. Mark-read endpoint batch-updates this field.
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    # 通知创建时间
+    # Notification creation time.
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

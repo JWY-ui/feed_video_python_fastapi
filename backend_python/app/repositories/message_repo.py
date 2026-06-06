@@ -1,4 +1,5 @@
-"""Message 数据访问层"""
+# -*- coding: utf-8 -*-
+"""Message data access layer."""
 from datetime import datetime
 
 from sqlalchemy import select, or_

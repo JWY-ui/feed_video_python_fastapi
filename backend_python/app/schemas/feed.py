@@ -1,27 +1,28 @@
+# -*- coding: utf-8 -*-
 """
-Feed 流请求/响应 Pydantic 模型。
+Feed request/response Pydantic models.
 
-定义了 5 种 Feed 流的请求参数和返回格式。
+Defines request params and response format for 5 feed types.
 
-游标分页的核心：每个 Request 都有游标字段，每个 Response 都有 next_xxx 字段。
-前端把上一页返回的 next_xxx 原样传入下一页请求的 xxx 字段，实现无限滚动。
+Cursor pagination: each Request has cursor fields, each Response has next_xxx fields.
+Frontend passes previous page's next_xxx into the next page's xxx field for infinite scroll.
 """
 from pydantic import BaseModel, Field
 
 
 class FeedAuthor(BaseModel):
-    """视频作者——Feed 流每条视频都带的作者信息"""
+    """Video author -- author info included with every feed item."""
     id: int
     username: str
 
 
 class FeedVideoItem(BaseModel):
     """
-    Feed 流中单条视频的返回格式。
+    Single video entry in a feed list.
 
-    注意和 VideoInfo（schemas/video.py）的区别：
-      - FeedVideoItem 是"列表中的摘要"，包含 is_liked（个性化）
-      - VideoInfo 是"详情"，不包含 is_liked（详情页单独查）
+    Difference from VideoInfo (schemas/video.py):
+      - FeedVideoItem is "summary in list", includes is_liked (personalized)
+      - VideoInfo is "detail", does not include is_liked (detail page queries separately)
     """
     id: int
     author: FeedAuthor
@@ -29,85 +30,85 @@ class FeedVideoItem(BaseModel):
     description: str | None = None
     play_url: str
     cover_url: str
-    create_time: int          # Unix 秒时间戳
+    create_time: int          # Unix second timestamp
     likes_count: int
-    is_liked: bool = False    # 当前用户是否已赞（匿名用户永远 False）
+    is_liked: bool = False    # Whether current user liked this (always false for anonymous)
 
 
-# ═══════════════════ 1. 最新视频流 ═══════════════════
+# ==================== 1. Latest feed ====================
 
 class ListLatestRequest(BaseModel):
-    """最新视频流请求——游标是 create_time 毫秒时间戳"""
+    """Latest feed request -- cursor is create_time millisecond timestamp."""
     limit: int = Field(default=10, gt=0, le=50)
-    latest_time: int = 0     # 0=首页；非0=上一页最后一条的 create_time（毫秒）
+    latest_time: int = 0     # 0=first page; non-zero=prev page last item's create_time (ms)
 
 
 class ListLatestResponse(BaseModel):
-    """最新视频流响应"""
+    """Latest feed response."""
     video_list: list[FeedVideoItem]
-    next_time: int = 0       # 本页最后一条的 create_time（毫秒），传给下一页的 latest_time
-    has_more: bool = False   # False=没有更多数据了
+    next_time: int = 0       # This page's last item create_time (ms), passed to next page's latest_time
+    has_more: bool = False   # False=no more data
 
 
-# ═══════════════════ 2. 点赞排行 ═══════════════════
+# ==================== 2. Most-liked feed ====================
 
 class ListLikesCountRequest(BaseModel):
-    """点赞排行请求——复合游标 (likes_count, id)"""
+    """Most-liked feed request -- compound cursor (likes_count, id)."""
     limit: int = Field(default=10, gt=0, le=50)
-    likes_count_before: int | None = None   # 上页最后一条的点赞数
-    id_before: int | None = None            # 上页最后一条的视频 ID
-    # 两个参数必须同时传或同时不传
+    likes_count_before: int | None = None   # Prev page last item's like count
+    id_before: int | None = None            # Prev page last item's video ID
+    # Both params must be passed together or both omitted
 
 
 class ListLikesCountResponse(BaseModel):
-    """点赞排行响应"""
+    """Most-liked feed response."""
     video_list: list[FeedVideoItem]
-    next_likes_count_before: int | None = None   # 本页最后一条的点赞数
-    next_id_before: int | None = None            # 本页最后一条的视频 ID
+    next_likes_count_before: int | None = None   # This page last item's like count
+    next_id_before: int | None = None            # This page last item's video ID
     has_more: bool = False
 
 
-# ═══════════════════ 3. 热度榜 ═══════════════════
+# ==================== 3. Hot ranking ====================
 
 class ListByPopularityRequest(BaseModel):
-    """热度榜请求——三元复合游标"""
+    """Hot ranking request -- triple compound cursor."""
     limit: int = Field(default=10, gt=0, le=50)
-    as_of: int = 0                          # 快照时间（Redis 用）。0=服务端自动取当前分钟
-    offset: int = 0                         # 快照内的分页偏移
-    latest_id_before: int | None = None     # 上页最后一条的视频 ID
-    latest_popularity: int = 0              # 上页最后一条的热度值
-    latest_before: str = ""                 # 上页最后一条的创建时间（ISO 格式）
+    as_of: int = 0                          # Snapshot time (for Redis). 0=server auto-selects current minute
+    offset: int = 0                         # Pagination offset within snapshot
+    latest_id_before: int | None = None     # Prev page last item's video ID
+    latest_popularity: int = 0              # Prev page last item's popularity
+    latest_before: str = ""                 # Prev page last item's create time (ISO format)
 
 
 class ListByPopularityResponse(BaseModel):
-    """热度榜响应"""
+    """Hot ranking response."""
     video_list: list[FeedVideoItem]
-    as_of: int = 0                                    # 本页使用的快照时间
-    next_offset: int = 0                              # 下一页的 offset
+    as_of: int = 0                                    # Snapshot time used for this page
+    next_offset: int = 0                              # Next page offset
     has_more: bool = False
-    next_latest_popularity: int | None = None         # MySQL 降级路径的游标
+    next_latest_popularity: int | None = None         # Cursor for MySQL degradation path
     next_latest_before: str | None = None
     next_latest_id_before: int | None = None
 
 
-# ═══════════════════ 4. 关注流 ═══════════════════
+# ==================== 4. Following feed ====================
 
 class ListByFollowingRequest(BaseModel):
-    """关注流请求——游标是 create_time Unix 秒时间戳"""
+    """Following feed request -- cursor is create_time Unix second timestamp."""
     limit: int = Field(default=10, gt=0, le=50)
-    latest_time: int = 0     # 0=首页；非0=上页最后一条的 create_time（秒）
+    latest_time: int = 0     # 0=first page; non-zero=prev page last item's create_time (seconds)
 
 
 class ListByFollowingResponse(BaseModel):
-    """关注流响应"""
+    """Following feed response."""
     video_list: list[FeedVideoItem]
-    next_time: int = 0       # 本页最后一条的 create_time（秒）
+    next_time: int = 0       # This page last item's create_time (seconds)
     has_more: bool = False
 
 
-# ═══════════════════ 5. 话题流 ═══════════════════
+# ==================== 5. Tag feed ====================
 
 class ListByTagRequest(BaseModel):
-    """话题流请求——不翻页，一次性加载"""
+    """Tag feed request -- no pagination, single load."""
     tag_name: str = Field(..., min_length=1)
     limit: int = Field(default=10, gt=0, le=50)

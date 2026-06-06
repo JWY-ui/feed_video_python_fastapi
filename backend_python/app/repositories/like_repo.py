@@ -1,4 +1,5 @@
-"""Like 数据访问层"""
+# -*- coding: utf-8 -*-
+"""Like data access layer."""
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +30,7 @@ class LikeRepository:
         return result.scalar() > 0
 
     async def create_ignore_duplicate(self, **kwargs) -> bool:
-        """返回 True=新创建, False=已存在"""
+        """Returns True=newly created, False=already exists."""
         if await self.is_liked(kwargs["video_id"], kwargs["account_id"]):
             return False
         self.db.add(Like(**kwargs))

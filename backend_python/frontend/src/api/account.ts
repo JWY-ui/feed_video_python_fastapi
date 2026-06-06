@@ -43,6 +43,6 @@ export function updateProfile(data: { avatar_url?: string; bio?: string }) {
   return postJson<MessageResponse>('/account/updateProfile', data, { authRequired: true })
 }
 
-export function refresh(refreshToken: string) {
-  return postJson<TokenResponse>('/account/refresh', { refresh_token: refreshToken })
+export function refresh(refreshToken: string, accessToken: string) {
+  return postJson<TokenResponse>('/account/refresh', { refresh_token: refreshToken, access_token: accessToken })
 }

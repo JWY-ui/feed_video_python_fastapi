@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-视频模块路由——9 个接口
+Video module routes -- 9 endpoints.
 """
 import hashlib
 import os
@@ -39,7 +40,7 @@ def _build_absolute_url(request: Request, path: str) -> str:
     return f"{scheme}://{request.base_url.netloc.rstrip('/')}{path}"
 
 
-# ═══════════ 公开接口 ═══════════
+# ==================== Public endpoints ====================
 
 @public_router.post("/listByAuthorID")
 async def list_by_author_id(req: ListByAuthorIDRequest,
@@ -56,7 +57,7 @@ async def get_detail(req: GetDetailRequest,
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ═══════════ 需登录 ═══════════
+# ==================== Protected endpoints (require login) ====================
 
 @protected_router.post("/publish")
 async def publish_video(req: PublishVideoRequest,
@@ -74,7 +75,7 @@ async def publish_video(req: PublishVideoRequest,
         title=req.title, description=req.description,
         play_url=req.play_url, cover_url=req.cover_url,
     )
-    # 写入 Feed 时间线（Redis ZSET）
+    # Write to Feed timeline (Redis ZSET)
     feed_svc = FeedService(FeedRepository(db), LikeRepository(db))
     from datetime import datetime
     create_time = datetime.fromisoformat(video["create_time"]) if isinstance(video["create_time"], str) else video["create_time"]
@@ -110,7 +111,7 @@ async def upload_cover(file: UploadFile = File(...),
     return CoverUploadResponse(url=abs_url, cover_url=abs_url)
 
 
-# ═══════════ 分片上传 ═══════════
+# ==================== Chunked upload ====================
 
 @protected_router.post("/chunk/init", response_model=InitChunkResponse)
 async def chunk_init(req: InitChunkRequest,

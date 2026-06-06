@@ -1,4 +1,5 @@
-"""点赞路由——4 个接口，全部需要登录"""
+# -*- coding: utf-8 -*-
+"""Like routes -- 4 endpoints, all require login."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,4 +51,4 @@ async def is_liked(req: LikeRequest,
 async def list_my_liked_videos(current_user: dict = Depends(get_current_user),
                                service: LikeService = Depends(_get_like_service)):
     videos = await service.list_liked_videos(current_user["account_id"])
-    return videos  # dict 列表，key 和视频 Schema 一致
+    return videos  # list of dicts, keys match Video schema

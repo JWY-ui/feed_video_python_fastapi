@@ -1,19 +1,20 @@
+# -*- coding: utf-8 -*-
 """
-评论表 (comments)
+Comment table (comments)
 
-设计要点：
-  1. username 冗余存储——和 Video 表一样，评论列表展示作者名时避免 JOIN
-  2. author_id 单独存——用于删除权限校验："只有作者本人能删"
-  3. 三个索引各有用途：
-     idx_username  → 极少用（@提及通知时按名查人可走）
-     idx_video_id  → 视频详情页加载评论列表（每页 200 条，时间正序）
-     idx_author_id → 几乎不用（暂未实现"我的评论"功能，但预留索引）
+Design notes:
+  1. username stored redundantly -- like Video table, avoids JOIN for author name display.
+  2. author_id stored separately -- used for delete permission check: "only comment author can delete".
+  3. Three indexes:
+     idx_username  -> rarely used (@mention notification lookup by name)
+     idx_video_id  -> video detail page comment list (max 200, ascending by time)
+     idx_author_id -> almost unused (no "my comments" feature yet, reserved)
 
-被哪些查询使用：
-  - 发布评论：INSERT
-  - 删除评论：DELETE WHERE id = ?（主键删除）
-  - 评论列表：SELECT WHERE video_id = ? ORDER BY created_at ASC LIMIT 200
-  - @提及通知：SELECT id FROM accounts WHERE username = ?（跨表查询）
+Used by queries:
+  - Publish comment: INSERT
+  - Delete comment: DELETE WHERE id = ? (PK delete)
+  - Comment list: SELECT WHERE video_id = ? ORDER BY created_at ASC LIMIT 200
+  - @mention notification: SELECT id FROM accounts WHERE username = ? (cross-table)
 """
 from datetime import datetime
 
@@ -27,13 +28,13 @@ class Comment(Base):
     __tablename__ = "comments"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # 冗余的作者名——评论列表展示时不需要 JOIN accounts
+    # Redundant author name -- display without JOINing accounts.
     username: Mapped[str] = mapped_column(String(255), index=True)
-    # 所属视频 ID——评论列表查询的高频过滤条件
+    # Target video ID -- high-frequency filter for comment list queries.
     video_id: Mapped[int] = mapped_column(Integer, index=True)
-    # 作者 ID——删除评论时的权限校验字段
+    # Author ID -- permission check field for comment deletion.
     author_id: Mapped[int] = mapped_column(Integer, index=True)
-    # 评论内容。Text 类型可存长文本（MySQL 最大 65KB）
+    # Comment content. Text type supports long content (MySQL max 65KB).
     content: Mapped[str] = mapped_column(Text)
-    # 评论时间。列表按时间正序排列（旧评论在前）
+    # Comment time. List ordered ascending (oldest comments first).
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

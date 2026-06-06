@@ -1,4 +1,5 @@
-"""Social 数据访问层"""
+# -*- coding: utf-8 -*-
+"""Social data access layer."""
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -1,17 +1,15 @@
-"""
-模型聚合导出——所有 ORM Model 在这里统一 import。
+# -*- coding: utf-8 -*-
+"""Model exports -- all ORM Models are imported here for unified access.
 
-为什么需要一个 __init__.py？
-  1. main.py 只需要 from app.models import Account, Video, ... 一行
-     不需要知道每个 Model 在哪个子文件里
-  2. import 时会触发 SQLAlchemy 的 __init_subclass__，
-     把每个 Model 注册到 Base.metadata 中
-     Base.metadata.create_all() 靠这个注册表知道要建哪些表
+Why a __init__.py?
+  1. main.py just needs `from app.models import Account, Video, ...` one line
+  2. Import triggers SQLAlchemy __init_subclass__, registering each Model
+     in Base.metadata. Base.metadata.create_all() relies on this registry.
 
-如果加新表：
-  1. 在 models/ 下新建文件定义 Model
-  2. 在下面加一行 from app.models.xxx import Xxx
-  3. 在 __all__ 里加 "Xxx"
+Adding a new table:
+  1. Create a new file under models/ defining the Model
+  2. Add `from app.models.xxx import Xxx` below
+  3. Add "Xxx" to __all__
 """
 from app.models.account import Account
 from app.models.video import Video, OutboxMsg

@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 """
-Account 业务逻辑层（Service）
+Account business logic layer (Service).
 
-只处理 dict 和基本类型，不 import 任何 SQLAlchemy Model。
+Operates only on dicts and primitives, never imports SQLAlchemy Models.
 """
 from sqlalchemy.exc import IntegrityError
 
@@ -16,16 +17,16 @@ class AccountService:
     def __init__(self, repo: AccountRepository):
         self.repo = repo
 
-    # ━━━ 注册 ━━━
+    # ---- Register ----
     async def register(self, username: str, password: str) -> None:
         hashed = pwd.hash_password(password)
         await self.repo.create(username, hashed)
 
-    # ━━━ 登录 ━━━
+    # ---- Login ----
     async def login(self, username: str, password: str) -> tuple[str, str, dict]:
         """
-        登录成功返回 (access_token, refresh_token, user_dict)
-        user_dict = {"id", "username", "avatar_url", "bio"} 可直接转 Schema
+        Login success returns (access_token, refresh_token, user_dict).
+        user_dict = {"id", "username", "avatar_url", "bio"} can be directly converted to Schema.
         """
         user = await self.repo.find_by_username(username)
         if user is None:
@@ -43,38 +44,38 @@ class AccountService:
             "avatar_url": user["avatar_url"], "bio": user["bio"],
         }
 
-    # ━━━ 刷新 Token ━━━
+    # ---- Refresh Token ----
     async def refresh_access_token(self, refresh_token: str, access_token: str) -> tuple[str, int, str]:
         """
-        刷新 Access Token——用过期 Token 拿 user_id，O(1) 查用户。
+        Refresh Access Token -- use expired token to get user_id, O(1) user lookup.
 
-        为什么传两个 Token？
-          refresh_token 是随机字符串，不含任何用户信息，无法知道属谁。
-          过期 access_token 虽然过期了但 payload 里的 account_id 还在。
-          解码时跳过过期验证，拿出 account_id，再查这个用户的 refresh_token 是否匹配。
+        Why send two tokens?
+          refresh_token is a random string, contains no user info, can't identify owner.
+          Expired access_token has expired but its payload still contains account_id.
+          Decode skipping expiry check, extract account_id, then verify refresh_token matches.
 
-        从 O(N) 全表扫描优化为 O(1) 主键查询。
+        Optimized from O(N) full table scan to O(1) PK lookup.
         """
         if not refresh_token:
             raise ValueError("refresh token is empty")
 
-        # 1. 从过期 access_token 解码出 account_id（跳过 exp 验证）
+        # 1. Extract account_id from expired access_token (skip exp validation)
         try:
             payload = jwt_helper.decode_token_skip_expiry(access_token)
         except jwt_helper.JWTError:
             raise ValueError("invalid access token")
 
-        # 2. O(1) 查用户
+        # 2. O(1) user lookup by PK
         u = await self.repo.find_by_id(payload["account_id"])
         if u is None or u["refresh_token"] != refresh_token:
             raise ValueError("invalid refresh token")
 
-        # 3. 生成新 token
+        # 3. Generate new token
         new_token = jwt_helper.create_access_token(u["id"], u["username"])
         await self.repo.update_token(u["id"], new_token, u["refresh_token"])
         return new_token, u["id"], u["username"]
 
-    # ━━━ 登出 ━━━
+    # ---- Logout ----
     async def logout(self, account_id: int) -> None:
         user = await self.repo.find_by_id(account_id)
         if user is None:
@@ -83,7 +84,7 @@ class AccountService:
             return
         await self.repo.clear_token(account_id)
 
-    # ━━━ 改密 ━━━
+    # ---- Change Password ----
     async def change_password(self, username: str, old_password: str, new_password: str) -> None:
         user = await self.repo.find_by_username(username)
         if user is None:
@@ -96,7 +97,7 @@ class AccountService:
         await self.repo.update_password(user["id"], new_hash)
         await self.repo.clear_token(user["id"])
 
-    # ━━━ 查询 ━━━
+    # ---- Query ----
     async def find_by_id(self, account_id: int) -> dict:
         user = await self.repo.find_by_id(account_id)
         if user is None:
@@ -109,7 +110,7 @@ class AccountService:
             raise ValueError("account not found")
         return user
 
-    # ━━━ 改名 ━━━
+    # ---- Rename ----
     async def rename(self, account_id: int, new_username: str) -> str:
         if not new_username or not new_username.strip():
             raise ValueError("new_username is required")
@@ -123,7 +124,7 @@ class AccountService:
 
         return new_token
 
-    # ━━━ 头像与简介 ━━━
+    # ---- Avatar & Bio ----
     async def update_avatar(self, account_id: int, avatar_url: str) -> None:
         await self.repo.update_avatar(account_id, avatar_url)
 

@@ -1,4 +1,5 @@
-"""Video 数据访问层"""
+# -*- coding: utf-8 -*-
+"""Video data access layer."""
 from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +22,7 @@ class VideoRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ━━━ 增 ━━━
+    # ---- Create ----
     async def create(self, **kwargs) -> int:
         v = Video(**kwargs)
         self.db.add(v)
@@ -44,12 +45,12 @@ class VideoRepository:
     async def create_video_tag(self, video_id: int, tag_id: int) -> None:
         self.db.add(VideoTag(video_id=video_id, tag_id=tag_id))
 
-    # ━━━ 删 ━━━
+    # ---- Delete ----
     async def delete_video(self, video_id: int) -> None:
         stmt = delete(Video).where(Video.id == video_id)
         await self.db.execute(stmt)
 
-    # ━━━ 查 ━━━
+    # ---- Read ----
     async def get_by_id(self, video_id: int) -> dict | None:
         row = await self.db.get(Video, video_id)
         return _to_dict(row) if row else None
@@ -81,7 +82,7 @@ class VideoRepository:
         result = await self.db.execute(stmt)
         return result.scalar() or 0
 
-    # ━━━ 改 ━━━
+    # ---- Update ----
     async def change_likes_count(self, video_id: int, delta: int) -> None:
         await self.db.execute(
             update(Video).where(Video.id == video_id)

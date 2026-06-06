@@ -1,4 +1,5 @@
-"""关注模块——Pydantic 请求/响应模型"""
+# -*- coding: utf-8 -*-
+"""Follow module -- Pydantic request/response models."""
 from pydantic import BaseModel, Field
 
 
@@ -11,7 +12,7 @@ class UnfollowRequest(BaseModel):
 
 
 class GetAllFollowersRequest(BaseModel):
-    vlogger_id: int = 0  # 0 表示查当前登录用户
+    vlogger_id: int = 0  # 0 means query current logged-in user
 
 
 class GetAllVloggersRequest(BaseModel):

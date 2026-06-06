@@ -1,9 +1,10 @@
-"""通知模块——Pydantic 请求/响应模型"""
+# -*- coding: utf-8 -*-
+"""Notification module -- Pydantic request/response models."""
 from pydantic import BaseModel
 
 
 class MarkReadRequest(BaseModel):
-    id: int | None = None  # None 表示全部标记已读
+    id: int | None = None  # None means mark all as read
 
 
 class NotificationInfo(BaseModel):

@@ -1,4 +1,5 @@
-"""私信路由——2 个接口，全部需要登录"""
+# -*- coding: utf-8 -*-
+"""Message routes -- 2 endpoints, all require login."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 

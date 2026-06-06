@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-视频业务逻辑——全链路只操作基本类型和dict
+Video business logic -- entire chain operates on primitives and dicts.
 """
 import os
 import secrets
@@ -9,6 +10,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.video_repo import VideoRepository
+from app.utils.redis_client import redis_client
 from app.utils.tag_parser import extract_tags
 
 
@@ -39,10 +41,10 @@ class VideoService:
 
     async def delete(self, video_id: int, author_id: int) -> None:
         """
-        删除视频——只有作者本人可以删除。
+        Delete video -- only the author can delete.
 
-        同时主动失效 Redis 缓存（一致性保证）。
-        不失效的话，用户会在 5 分钟内看到"已删除"的视频。
+        Also proactively invalidates Redis cache (consistency guarantee).
+        Without invalidation, users would see "deleted" videos for up to 5 minutes.
         """
         video = await self.repo.get_by_id(video_id)
         if video is None:
@@ -50,69 +52,68 @@ class VideoService:
         if video["author_id"] != author_id:
             raise PermissionError("not the author")
         await self.repo.delete_video(video_id)
-        # 主动失效缓存——和写操作配套的一致性保证
+        # Proactive cache invalidation -- consistency paired with write operations
         if redis_client.available:
-            from app.utils.redis_client import redis_client
             await redis_client.delete(redis_client.key("video:detail:%d", video_id))
 
     async def get_detail(self, video_id: int) -> dict:
         """
-        视频详情——带 Redis 缓存 + 防击穿锁 + 随机 TTL。
+        Video detail -- with Redis cache + anti-stampede lock + random TTL.
 
-        三层防护：
-          1. 缓存雪崩防护 → 随机 TTL（300±30 秒），不会同一秒全部过期
-          2. 缓存击穿防护 → SETNX 互斥锁，热点 key 只有 1 个请求回源
-          3. 缓存穿透防护 → 不存在的视频缓存空标记（60 秒）
+        Three-layer protection:
+          1. Cache avalanche protection -> random TTL (300 +/- 30 sec), no simultaneous expiry
+          2. Cache stampede protection -> SETNX mutex lock, only 1 request fills cache
+          3. Cache penetration protection -> cache null marker for non-existent videos (60 sec)
 
-        更新视频/删除视频时主动 DEL 缓存，保证一致性。
+        Video update/delete proactively DEL cache to maintain consistency.
         """
         import json
         cache_key = redis_client.key("video:detail:%d", video_id)
 
-        # ━━ 第 1 层：查缓存 ━━
+        # Layer 1: Check cache
         if redis_client.available:
             cached = await redis_client.get(cache_key)
             if cached == "__NULL__":
-                raise ValueError("video not found")  # 穿透保护：60 秒内不重复查 MySQL
+                raise ValueError("video not found")  # penetration protection: no repeat MySQL query for 60s
             if cached:
                 return json.loads(cached)
 
-        # ━━ 第 2 层：抢锁（防击穿）━━━
+        # Layer 2: Acquire lock (anti-stampede)
         if redis_client.available:
             lock_key = redis_client.key("lock:video:detail:%d", video_id)
-            locked = await redis_client.set(lock_key, "1", ex=3)  # SET NX + EX 3s
+            locked = await redis_client.set(lock_key, "1", ex=3, nx=True)
 
             if locked:
-                # 拿到锁 → 回源 + 回填
+                # Got lock -> fetch from source + backfill
                 try:
-                    # 双重检查：可能别人已经回填了
+                    # Double-check: maybe someone already backfilled
                     cached = await redis_client.get(cache_key)
                     if cached:
                         return json.loads(cached) if cached != "__NULL__" else (_ for _ in ()).throw(ValueError("video not found"))
 
                     video = await self.repo.get_by_id(video_id)
                     if video is None:
-                        await redis_client.set(cache_key, "__NULL__", ex=60)  # 空值缓存
+                        await redis_client.set(cache_key, "__NULL__", ex=60)  # null value cache
                         raise ValueError("video not found")
 
                     import random
-                    ttl = 300 + random.randint(0, 60)  # 5 分钟 ± 60 秒随机
+                    ttl = 300 + random.randint(0, 60)  # 5 min +/- 60 sec random
                     await redis_client.set(cache_key, json.dumps(video), ex=ttl)
                     return video
                 finally:
                     await redis_client.delete(lock_key)
 
             else:
-                # 没拿到锁 → 等别人回填
+                # Didn't get lock -> wait for others to backfill
                 import asyncio
                 for _ in range(5):
-                    await asyncio.sleep(0.02)  # 等 20ms
+                    await asyncio.sleep(0.02)  # wait 20ms
                     cached = await redis_client.get(cache_key)
                     if cached and cached != "__NULL__":
                         return json.loads(cached)
-                # 等了 100ms 没等到 → 直接查 MySQL（兜底，防止锁持有者崩溃导致死等）
+                # Waited 100ms with no result -> query MySQL directly (fallback, prevents infinite wait if lock holder crashes)
 
-        # ━━ 第 3 层：MySQL 兜底 ━━
+        # Layer 3: MySQL fallback
         video = await self.repo.get_by_id(video_id)
         if video is None:
             raise ValueError("video not found")

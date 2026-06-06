@@ -1,20 +1,21 @@
+# -*- coding: utf-8 -*-
 """
-话题标签表 (tags) + 视频-标签关联表 (video_tags)
+Tag table (tags) + Video-Tag association table (video_tags)
 
-视频和标签是多对多关系：
-  一个视频可以有多个 #话题
-  一个 #话题 可以对应多个视频
+Many-to-many relationship between videos and tags:
+  One video can have multiple #tags
+  One #tag can belong to multiple videos
 
-通过 video_tags 中间表关联。
+Connected via video_tags junction table.
 
-数据流：
-  发布视频 → 正则提取 #话题 → INSERT tags (FirstOrCreate) → INSERT video_tags
-  话题流查询 → JOIN videos + video_tags + tags WHERE tags.name = ?
+Data flow:
+  Publish video -> regex extract #tags -> INSERT tags (FirstOrCreate) -> INSERT video_tags
+  Tag feed query -> JOIN videos + video_tags + tags WHERE tags.name = ?
 
-为什么不用逗号分隔字段（如 tag_list = "美食,旅游"）？
-  1. 无法建索引——WHERE tag_list LIKE '%美食%' 走不了索引，全表扫描
-  2. 更新删除困难——去掉一个标签需要字符串拼接
-  3. 标签表可扩展——未来可以加标签图标、标签简介等字段
+Why not comma-separated field (e.g. tag_list = "food,travel")?
+  1. No index possible -- WHERE tag_list LIKE '%food%' can't use index, full table scan
+  2. Hard to update/delete -- removing one tag requires string manipulation
+  3. Tag table is extensible -- can add tag icon, description etc. later
 """
 from sqlalchemy import String, Integer
 from sqlalchemy.orm import Mapped, mapped_column
@@ -26,7 +27,7 @@ class Tag(Base):
     __tablename__ = "tags"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # 标签名（不含 # 号）。唯一索引确保同一话题不重复创建
+    # Tag name (without #). Unique index ensures no duplicate tag creation.
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
 
 
@@ -34,7 +35,7 @@ class VideoTag(Base):
     __tablename__ = "video_tags"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # 视频 ID。idx 用于话题流查询时的 JOIN
+    # Video ID. Indexed for JOIN in tag feed queries.
     video_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    # 标签 ID。idx 同上
+    # Tag ID. Indexed same as above.
     tag_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)

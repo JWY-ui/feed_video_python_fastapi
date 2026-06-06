@@ -1,6 +1,5 @@
-"""Comment 数据访问层——唯一能 import Comment Model 的地方"""
-from datetime import datetime
-
+# -*- coding: utf-8 -*-
+"""Comment data access layer -- the only place that imports Comment Model."""
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +20,7 @@ class CommentRepository:
         self.db = db
 
     async def create(self, **kwargs) -> int:
-        """创建评论，返回新 ID"""
+        """Create comment, return new ID."""
         c = Comment(**kwargs)
         self.db.add(c)
         await self.db.flush()

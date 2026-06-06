@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 """
-评论业务逻辑
+Comment business logic.
 
-全链路只操作 dict 和基本类型，不 import SQLAlchemy Model。
+Entire chain operates on dicts and primitives, never imports SQLAlchemy Models.
 """
 import re
 from datetime import datetime
@@ -20,7 +21,7 @@ class CommentService:
 
     async def publish(self, video_id: int, author_id: int,
                       username: str, content: str) -> None:
-        """发布评论 + @提及通知"""
+        """Publish comment + @mention notifications."""
         if not await self.video_repo.is_exist(video_id):
             raise ValueError("video not found")
 
@@ -49,7 +50,7 @@ class CommentService:
 
     async def _notify_mentions(self, comment_id: int, video_id: int,
                                 author_id: int, username: str, content: str):
-        """@提及通知——写 notifications 表"""
+        """@mention notifications -- write to notifications table."""
         matches = _MENTION_RE.findall(content)
         if not matches:
             return
@@ -73,5 +74,5 @@ class CommentService:
                     sender_id=author_id,
                     type="mention",
                     target_id=video_id,
-                    content=f"{username} 在评论中提到了你",
+                    content=f"{username} mentioned you in a comment",
                 )

@@ -1,4 +1,5 @@
-"""Notification 数据访问层"""
+# -*- coding: utf-8 -*-
+"""Notification data access layer."""
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 

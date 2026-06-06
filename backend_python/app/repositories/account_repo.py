@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 """
-Account 数据访问层（Repository）
+Account data access layer (Repository).
 
-唯一能 import SQLAlchemy Model 的地方。
-所有方法返回 dict 或基本类型，绝不返回 Model 对象。
-内部用 Redis → MySQL 自愈，调用方无感知。
+The only place that imports SQLAlchemy Models.
+All methods return dicts or primitives, never Model objects.
+Internally uses Redis -> MySQL self-healing, transparent to callers.
 """
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ REFRESH_TTL = 7 * 86400
 
 
 def _to_dict(row: Account) -> dict:
-    """Model → dict，上层永远看不到 SQLAlchemy 对象"""
+    """Model -> dict. Upper layers never see SQLAlchemy objects."""
     return {
         "id": row.id,
         "username": row.username,
@@ -34,34 +35,32 @@ class AccountRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ━━━ 增 ━━━
+    # ---- Create ----
 
     async def create(self, username: str, password_hash: str) -> None:
-        """创建用户——传值不传 Model"""
+        """Create user -- pass values, not a Model object."""
         self.db.add(Account(username=username, password=password_hash))
 
-    # ━━━ 查 ━━━
+    # ---- Read ----
 
     async def find_by_id(self, account_id: int) -> dict | None:
-        """按主键查——返回 dict 或 None"""
+        """Look up by PK -- returns dict or None."""
         row = await self.db.get(Account, account_id)
         return _to_dict(row) if row else None
 
     async def find_by_username(self, username: str) -> dict | None:
-        """按用户名查——返回 dict 或 None"""
+        """Look up by username -- returns dict or None."""
         stmt = select(Account).where(Account.username == username)
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         return _to_dict(row) if row else None
 
-
-
-    # ━━━ Token 缓存 ━━━
+    # ---- Token cache ----
 
     async def get_token_cache(self, account_id: int) -> str | None:
         """
-        查 Token 缓存——优先 Redis，未命中降级 MySQL 并回写
-        返回 token 字符串、"REVOKED" 或 None（用户不存在）
+        Check token cache -- Redis first, fallback to MySQL with write-back.
+        Returns token string, "REVOKED", or None (user doesn't exist).
         """
         if redis_client.available:
             cached = await redis_client.get(
@@ -88,21 +87,21 @@ class AccountRepository:
         return user["token"]
 
     async def set_token_cache(self, account_id: int, token: str) -> None:
-        """写 Token 缓存"""
+        """Write token cache."""
         if redis_client.available:
             await redis_client.set(
                 redis_client.key("account:%d", account_id), token, ex=CACHE_TTL,
             )
 
     async def revoke_token_cache(self, account_id: int) -> None:
-        """撤销 Token 缓存"""
+        """Revoke token cache."""
         if redis_client.available:
             await redis_client.set(
                 redis_client.key("account:%d", account_id), "REVOKED", ex=REVOKED_TTL,
             )
 
     async def set_refresh_cache(self, account_id: int, refresh_token: str) -> None:
-        """写 Refresh Token 缓存"""
+        """Write refresh token cache."""
         if redis_client.available:
             await redis_client.set(
                 redis_client.key("account:%d:refresh", account_id),
@@ -113,10 +112,10 @@ class AccountRepository:
                 str(account_id), ex=REFRESH_TTL,
             )
 
-    # ━━━ 改 ━━━
+    # ---- Update ----
 
     async def update_token(self, account_id: int, token: str, refresh_token: str) -> None:
-        """登录/刷新时写双 Token（MySQL + Redis）"""
+        """Login/refresh -- write dual tokens (MySQL + Redis)."""
         stmt = (
             update(Account)
             .where(Account.id == account_id)
@@ -127,7 +126,7 @@ class AccountRepository:
         await self.set_refresh_cache(account_id, refresh_token)
 
     async def clear_token(self, account_id: int) -> None:
-        """登出时清空双 Token（MySQL + Redis 标记撤销）"""
+        """Logout -- clear dual tokens (MySQL + Redis revoke marker)."""
         stmt = (
             update(Account)
             .where(Account.id == account_id)
@@ -137,7 +136,7 @@ class AccountRepository:
         await self.revoke_token_cache(account_id)
 
     async def update_password(self, account_id: int, new_password_hash: str) -> None:
-        """改密（MySQL + 撤销 Redis 缓存）"""
+        """Change password (MySQL + revoke Redis cache)."""
         stmt = (
             update(Account)
             .where(Account.id == account_id)
@@ -147,7 +146,7 @@ class AccountRepository:
         await self.revoke_token_cache(account_id)
 
     async def rename(self, account_id: int, new_username: str, new_token: str) -> None:
-        """改名 + 更新 token（MySQL + Redis）"""
+        """Rename + update token (MySQL + Redis)."""
         await self.db.execute(
             update(Account).where(Account.id == account_id).values(username=new_username)
         )

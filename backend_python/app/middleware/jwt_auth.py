@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 """
-JWT 鉴权（get_current_user 强制 / get_optional_user 软鉴权）
+JWT authentication (get_current_user hard-auth / get_optional_user soft-auth).
 
-全链路只操作 dict，不出现 SQLAlchemy Model。
+Operates entirely on dicts, never exposes SQLAlchemy Models.
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials

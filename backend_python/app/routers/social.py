@@ -1,4 +1,5 @@
-"""关注路由——5 个接口，全部需要登录"""
+# -*- coding: utf-8 -*-
+"""Follow routes -- 5 endpoints, all require login."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 

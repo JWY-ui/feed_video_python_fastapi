@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-通知路由——4 个接口（含 SSE 实时推送），全部需要登录
+Notification routes -- 4 endpoints (including SSE real-time push), all require login.
 """
 import asyncio
 import json

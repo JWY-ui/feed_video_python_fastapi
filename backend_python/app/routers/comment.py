@@ -1,4 +1,5 @@
-"""评论路由——3 个接口"""
+# -*- coding: utf-8 -*-
+"""Comment routes -- 3 endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 

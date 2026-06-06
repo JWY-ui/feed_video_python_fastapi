@@ -1,4 +1,5 @@
-"""点赞模块——Pydantic 请求/响应模型"""
+# -*- coding: utf-8 -*-
+"""Like module -- Pydantic request/response models."""
 from pydantic import BaseModel, Field
 
 

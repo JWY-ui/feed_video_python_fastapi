@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-关注业务逻辑——全链路只操作基本类型和dict
+Follow business logic -- entire chain operates on primitives and dicts.
 """
 from app.repositories.social_repo import SocialRepository
 from app.repositories.account_repo import AccountRepository

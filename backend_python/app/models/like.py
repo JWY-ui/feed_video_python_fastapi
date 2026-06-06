@@ -1,17 +1,18 @@
+# -*- coding: utf-8 -*-
 """
-点赞表 (likes)
+Like table (likes)
 
-唯一约束 (video_id, account_id)：同一用户对同一视频只能赞一次。
-这是数据库层面最后一道防线——Service 层虽然也做了查重，
-但并发场景下两个请求同时查"未点赞"并同时 INSERT，数据库唯一约束
-能保证不产生重复数据。
+Unique constraint (video_id, account_id): one user can like each video only once.
+This is the last line of defense at the DB level -- Service layer also checks
+for duplicates, but under concurrency two requests can both see "not liked"
+and both try to INSERT. The DB unique constraint guarantees no duplicate rows.
 
-被哪些查询使用：
-  - 点赞：INSERT + 唯一约束冲突检测
-  - 取消赞：DELETE WHERE video_id = ? AND account_id = ?
-  - 是否已赞：SELECT COUNT WHERE video_id = ? AND account_id = ?
-  - 批量查点赞状态：SELECT video_id WHERE video_id IN (...) AND account_id = ?
-  - 我赞过的视频：JOIN likes + videos WHERE account_id = ?
+Used by queries:
+  - Like: INSERT + unique constraint conflict detection
+  - Unlike: DELETE WHERE video_id = ? AND account_id = ?
+  - Is liked: SELECT COUNT WHERE video_id = ? AND account_id = ?
+  - Batch check liked status: SELECT video_id WHERE video_id IN (...) AND account_id = ?
+  - My liked videos: JOIN likes + videos WHERE account_id = ?
 """
 from datetime import datetime
 
@@ -25,12 +26,12 @@ class Like(Base):
     __tablename__ = "likes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # 被点赞的视频 ID
+    # ID of the liked video.
     video_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    # 点赞者的用户 ID
+    # ID of the user who liked.
     account_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    # 点赞时间。列表查询按此字段倒序
+    # Like time. List queries ordered descending by this field.
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
-    # 联合唯一：同一人不能重复点赞同一视频
+    # Compound unique: same user cannot like the same video twice.
     __table_args__ = (UniqueConstraint("video_id", "account_id"),)

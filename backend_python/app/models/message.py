@@ -1,16 +1,17 @@
+# -*- coding: utf-8 -*-
 """
-私信表 (messages)
+Direct message table (messages)
 
-查询双方聊天记录时需要查"我发给对方"或"对方发给我"的全部消息：
+Query for chat history between two users:
   SELECT * FROM messages
   WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)
   ORDER BY created_at DESC
   LIMIT 50
 
-两个单列索引（from_id, to_id）分别服务于：
-  - 我发给所有人的私信（from_id 索引）
-  - 所有人发给我的私信（to_id 索引）
-  - 联合查询时 MySQL 会对两个索引做 index_merge
+Two single-column indexes (from_id, to_id) serve respectively:
+  - Messages I sent to everyone (from_id index)
+  - Messages everyone sent to me (to_id index)
+  - Combined query: MySQL does index_merge on both indexes
 """
 from datetime import datetime
 
@@ -24,13 +25,13 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # 发送者 ID
+    # Sender ID.
     from_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    # 接收者 ID
+    # Recipient ID.
     to_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    # 消息内容。Text 可存长文本
+    # Message content. Text supports long content.
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    # 是否已读。预留字段，当前版本未使用
+    # Whether read. Reserved field, not used in current version.
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    # 发送时间
+    # Send time.
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

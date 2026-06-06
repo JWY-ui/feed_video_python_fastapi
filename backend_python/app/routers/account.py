@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-Account 模块路由——12 个接口。Router 只管调 Service，不碰数据细节。
+Account module routes -- 12 endpoints. Router only calls Service, never touches data details.
 """
 import os
 import secrets
@@ -21,7 +22,7 @@ public_router = APIRouter()
 protected_router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
-# ═══════════ 公开接口 ═══════════
+# ==================== Public endpoints ====================
 
 @public_router.post("/register")
 async def register(req: RegisterRequest,
@@ -103,7 +104,7 @@ async def get_profile(req: GetProfileRequest,
     )
 
 
-# ═══════════ 需登录的接口 ═══════════
+# ==================== Protected endpoints (require login) ====================
 
 @protected_router.post("/logout")
 async def logout(current_user: dict = Depends(get_current_user),

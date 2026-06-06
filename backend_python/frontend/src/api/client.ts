@@ -30,7 +30,7 @@ async function tryRefresh(): Promise<string | null> {
       const res = await fetch(`${API_BASE}/account/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: auth.refreshToken }),
+        body: JSON.stringify({ refresh_token: auth.refreshToken, access_token: auth.token }),
       })
       if (!res.ok) { auth.clearTokens(); return null }
       const data = await res.json()
