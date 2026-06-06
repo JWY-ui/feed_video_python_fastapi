@@ -36,7 +36,7 @@ async function scrollToBottom() { await nextTick(); if (listEl.value) listEl.val
 
 async function loadChat() {
   if (!auth.isLoggedIn) { await router.push({ path: '/account', query: { redirect: route.fullPath } }); return }
-  if (!hasPeer.value) { await social.refreshMine(); state.loading = false; state.error = ''; state.peer = null; state.messages = []; return }
+  if (!hasPeer.value) { state.loading = true; await social.refreshMine(); state.loading = false; state.error = ''; state.peer = null; state.messages = []; return }
   if (!Number.isFinite(peerId.value) || peerId.value <= 0) { state.error = '无效的用户 id'; return }
   if (peerId.value === myId.value) { state.error = '请选择其他用户发送私信'; return }
   state.loading = true; state.error = ''
@@ -66,28 +66,28 @@ onMounted(loadChat)
       <!-- Contact list -->
       <div v-if="!hasPeer" class="panel contact-panel">
         <div class="panel-head">
-          <div><h2 style="margin:0">私信</h2><p class="subtle">选择关注或粉丝里的用户开始聊天。</p></div>
+          <div><h2 style="margin:0">私信</h2><p class="subtle">选择关注或粉丝里的用户开始聊天</p></div>
           <button class="ghost" :disabled="contactLoading" @click="social.refreshMine">刷新</button>
         </div>
         <div class="panel-body">
-          <div v-if="contactLoading" class="state-msg">加载中…</div>
+          <div v-if="state.loading || contactLoading" class="state-msg">加载中…</div>
           <div v-else-if="contactError" class="state-msg err">{{ contactError }}</div>
-          <div v-else-if="contactItems.length === 0" class="state-msg">暂无可聊天用户</div>
+          <div v-else-if="contactItems.length === 0" class="state-msg">暂无可聊天用户，去关注别人或被关注吧</div>
           <button v-for="user in contactItems" :key="user.id" class="contact-row" @click="openChat(user.id)">
             <UserAvatar :username="user.username" :id="user.id" :size="44" />
             <div style="flex:1;min-width:0"><div style="font-weight:700">@{{ user.username }}</div><div class="subtle mono">#{{ user.id }}</div></div>
-            <span class="pill" style="font-size:12px">聊天</span>
+            <span class="pill">聊天</span>
           </button>
         </div>
       </div>
 
       <!-- Chat -->
       <div v-else class="panel chat-panel">
-        <div class="panel-head" style="grid-template-columns:auto 1fr auto">
-          <button class="ghost" style="font-size:22px;padding:4px 12px" @click="router.back()">‹</button>
+        <div class="panel-head chat-head-bar">
+          <button class="ghost back-icon" @click="router.back()">‹</button>
           <button class="peer-btn" :disabled="!state.peer" @click="goPeerProfile">
-            <UserAvatar :username="state.peer?.username ?? 'User'" :id="state.peer?.id ?? peerId" :size="38" />
-            <span><strong>@{{ state.peer?.username ?? '加载中' }}</strong><br /><span class="subtle mono">#{{ state.peer?.id ?? peerId }}</span></span>
+            <UserAvatar :username="state.peer?.username ?? '...'" :id="state.peer?.id ?? peerId" :size="36" />
+            <span style="text-align:left"><strong>@{{ state.peer?.username ?? '加载中' }}</strong><br /><span class="subtle mono">#{{ state.peer?.id ?? peerId }}</span></span>
           </button>
           <button class="ghost" :disabled="state.loading" @click="loadChat">刷新</button>
         </div>
@@ -95,10 +95,11 @@ onMounted(loadChat)
         <div ref="listEl" class="msg-list">
           <div v-if="state.loading" class="state-msg">加载中…</div>
           <div v-else-if="state.error" class="state-msg err">{{ state.error }}</div>
-          <div v-else-if="orderedMessages.length === 0" class="state-msg">开始聊天吧</div>
+          <div v-else-if="orderedMessages.length === 0" class="state-msg">开始聊天吧！发送第一条消息</div>
 
           <div v-for="msg in orderedMessages" :key="msg.id" class="bubble-row" :class="{ mine: msg.from_id === myId }">
-            <UserAvatar v-if="msg.from_id !== myId" :username="state.peer?.username ?? 'User'" :id="state.peer?.id ?? msg.from_id" :size="30" />
+            <UserAvatar v-if="msg.from_id !== myId" :username="state.peer?.username ?? '?'" :id="state.peer?.id ?? 0" :size="28" />
+            <div v-else style="width:28px" />
             <div class="bubble-wrap">
               <div class="bubble">{{ msg.content }}</div>
               <div class="bubble-time">{{ formatTime(msg.created_at) }}</div>
@@ -107,8 +108,8 @@ onMounted(loadChat)
         </div>
 
         <div class="composer">
-          <textarea v-model="content" placeholder="输入私信内容" :disabled="!!state.error || state.loading || state.sending" @keydown.enter.exact.prevent="send" />
-          <button class="primary send-btn" :disabled="!canSend" @click="send">{{ state.sending ? '发送中' : '发送' }}</button>
+          <textarea v-model="content" placeholder="输入私信内容…" :disabled="!!state.error || state.loading || state.sending" @keydown.enter.exact.prevent="send" />
+          <button class="primary send-btn" :disabled="!canSend" @click="send">{{ state.sending ? '…' : '发送' }}</button>
         </div>
       </div>
     </div>
@@ -116,41 +117,42 @@ onMounted(loadChat)
 </template>
 
 <style scoped>
-.chat-shell { display: grid; height: calc(100dvh - 56px - 56px); }
+.chat-shell { height: calc(100dvh - 56px - 56px); }
 
-.panel { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-lg); overflow: hidden; display: grid; box-shadow: var(--shadow-sm); }
-.contact-panel { grid-template-rows: auto 1fr; }
-.chat-panel { grid-template-rows: auto 1fr auto; }
+.panel { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-lg); display: grid; box-shadow: var(--shadow-sm); overflow: hidden; }
+.contact-panel { grid-template-rows: auto 1fr; height: 100%; }
+.chat-panel { grid-template-rows: auto 1fr auto; height: 100%; }
 
 .panel-head { display: grid; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.chat-head-bar { grid-template-columns: auto 1fr auto; }
 .panel-head h2 { font-size: 18px; font-weight: 800; }
-.panel-body { overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.panel-body { overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; align-content: start; }
 
 .contact-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); cursor: pointer; font: inherit; text-align: left; transition: all 140ms; }
 .contact-row:hover { background: var(--surface-hover); border-color: var(--pink-soft); }
 
-.peer-btn { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-radius: var(--r-sm); border: none; background: none; cursor: pointer; font: inherit; text-align: left; }
+.back-icon { font-size: 24px; padding: 2px 8px; }
+.peer-btn { display: flex; align-items: center; gap: 10px; padding: 2px 8px; border-radius: var(--r-sm); border: none; background: none; cursor: pointer; font: inherit; }
 .peer-btn:hover { background: var(--surface-hover); }
+.peer-btn:disabled { opacity: 1; cursor: default; }
 
-.msg-list { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.state-msg { text-align: center; color: var(--muted); padding: 32px 0; }
+.msg-list { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.state-msg { text-align: center; color: var(--muted); padding: 48px 0; font-size: 14px; }
 .state-msg.err { color: var(--danger); }
 
-.bubble-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: end; }
-.bubble-row.mine { grid-template-columns: 1fr; justify-items: end; }
-.bubble-wrap { max-width: min(68%, 560px); display: grid; gap: 4px; }
-.bubble { padding: 10px 14px; border-radius: var(--r-md); line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-size: 14px; background: var(--bg); }
-.mine .bubble { background: var(--pink-bg); color: var(--ink); }
+.bubble-row { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: flex-end; }
+.bubble-row.mine { grid-template-columns: 1fr 28px; direction: rtl; }
+.bubble-row.mine > * { direction: ltr; }
+.bubble-wrap { max-width: min(72%, 560px); display: grid; gap: 4px; }
+.bubble { padding: 10px 14px; border-radius: var(--r-md); line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-size: 14px; color: var(--ink); background: var(--bg); }
+.mine .bubble { background: var(--pink-bg); }
 .bubble-time { font-size: 11px; color: var(--muted); }
-.mine .bubble-time { text-align: right; }
 
 .composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg); align-items: end; }
-.composer textarea { min-height: 44px; max-height: 120px; resize: vertical; }
-.send-btn { min-width: 80px; height: 44px; }
+.composer textarea { min-height: 42px; max-height: 100px; resize: vertical; }
+.send-btn { min-width: 72px; height: 42px; }
 
 @media (max-width: 640px) {
   .chat-shell { height: calc(100dvh - 56px - 56px); }
-  .composer { grid-template-columns: 1fr; }
-  .send-btn { width: 100%; }
 }
 </style>

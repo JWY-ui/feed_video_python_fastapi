@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 import { ApiError } from '../api/client'
 import * as commentApi from '../api/comment'
 import type { Comment, FeedVideoItem } from '../api/types'
@@ -17,6 +17,12 @@ const drawer = reactive({
   loading: false, error: '',
   comments: [] as Comment[], content: '',
 })
+
+// Auto-load comments when the drawer opens with a new video
+watch(() => props.video?.id, (id) => {
+  drawer.comments = []
+  if (id) loadComments()
+}, { immediate: true })
 
 function needLogin() { toast.error('请先登录') }
 

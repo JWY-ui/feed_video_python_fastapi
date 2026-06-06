@@ -205,15 +205,15 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; }
+.page { height: 100%; display: flex; flex-direction: column; background: #000; }
 .top { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .back-btn { color: var(--pink); font-weight: 700; text-decoration: none; font-size: 14px; }
 .back-btn:hover { opacity: 0.8; }
-.wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; }
-.center-hint { color: var(--muted); }
+.wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
+.center-hint { color: #eee; }
 .center-hint.bad { color: var(--danger); }
 
-.stage { width: min(980px, calc(100vw - 28px)); height: calc(100dvh - 56px - 48px - 24px); position: relative; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--border); box-shadow: var(--shadow-lg); background: #000; }
+.stage { width: min(980px, 100vw); height: calc(100dvh - 56px - 48px); position: relative; overflow: hidden; background: #000; }
 .video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.1) 45%, transparent 70%); pointer-events: none; }
 .meta { position: absolute; left: 16px; bottom: 18px; max-width: min(620px, calc(100% - 96px)); }

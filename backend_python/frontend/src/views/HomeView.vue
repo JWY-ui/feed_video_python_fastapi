@@ -182,20 +182,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; }
+.page { height: 100%; display: flex; flex-direction: column; background: #000; }
 .tabs { height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .tab { border: 1.5px solid var(--border); background: var(--surface); color: var(--ink-soft); border-radius: var(--r-full); padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 140ms var(--ease-out); }
 .tab:hover { border-color: var(--pink-soft); color: var(--pink); }
 .tab.on { border-color: transparent; background: var(--pink-gradient); color: #fff; box-shadow: 0 2px 8px oklch(0.62 0.21 4 / 0.25); }
 .tabs-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
-.scroller { flex: 1; min-height: 0; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; }
+.scroller { flex: 1; min-height: 0; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; background: #000; }
 .scroller::-webkit-scrollbar { width: 0; height: 0; }
-.center-hint { height: calc(100% - 60px); display: grid; place-items: center; color: var(--muted); }
+.center-hint { height: calc(100% - 60px); display: grid; place-items: center; color: #eee; }
 .center-hint.bad { color: var(--danger); }
 
-.slide { height: 100%; scroll-snap-align: start; padding: 12px; display: grid; place-items: center; }
-.stage { width: min(980px, calc(100vw - 28px)); height: calc(100dvh - 56px - 52px - 24px); position: relative; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--border); box-shadow: var(--shadow-lg); background: #000; }
+.slide { height: 100%; scroll-snap-align: start; display: grid; place-items: center; }
+.stage { width: min(980px, 100vw); height: calc(100dvh - 56px - 52px); position: relative; overflow: hidden; background: #000; }
 .video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.1) 45%, transparent 70%); pointer-events: none; }
 .meta { position: absolute; left: 16px; bottom: 18px; max-width: min(620px, calc(100% - 96px)); }
@@ -216,7 +216,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .hint .chip { background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.85); font-size: 11px; }
 
 @media (max-width: 640px) {
-  .stage { height: calc(100dvh - 56px - 52px - 24px); border-radius: var(--r-md); }
+  .stage { height: calc(100dvh - 56px - 52px); }
   .act { width: 56px; padding: 8px 4px; }
   .meta { left: 12px; bottom: 14px; }
   .actions { right: 6px; bottom: 14px; }
