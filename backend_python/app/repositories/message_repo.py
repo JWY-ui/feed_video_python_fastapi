@@ -24,7 +24,7 @@ class MessageRepository:
     async def send(self, from_id: int, to_id: int, content: str) -> dict:
         m = Message(
             from_id=from_id, to_id=to_id, content=content.strip(),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(datetime.UTC),
         )
         self.db.add(m)
         await self.db.flush()

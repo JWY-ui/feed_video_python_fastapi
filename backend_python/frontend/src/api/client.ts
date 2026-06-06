@@ -32,12 +32,14 @@ async function tryRefresh(): Promise<string | null> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: auth.refreshToken, access_token: auth.token }),
       })
-      if (!res.ok) { auth.clearTokens(); return null }
+      // Only clear tokens on 401 (refresh token invalid/expired), not on transient errors.
+      if (res.status === 401) { auth.clearTokens(); return null }
+      if (!res.ok) return null
       const data = await res.json()
       auth.setToken(data.token)
       return data.token as string
     } catch {
-      auth.clearTokens()
+      // Network error or timeout -- don't log out, just return null.
       return null
     } finally {
       isRefreshing = false

@@ -37,8 +37,10 @@ if count >= max_requests then
     return 0
 end
 
--- 4. Record this request (score = ms timestamp, member = score + random suffix for uniqueness)
-redis.call('ZADD', key, now, now .. ':' .. count)
+-- 4. Record this request. Use random suffix to prevent member collision
+--    when two requests arrive in the same millisecond.
+local suffix = string.format('%04x', math.random(0, 0xffff))
+redis.call('ZADD', key, now, now .. ':' .. count .. ':' .. suffix)
 redis.call('EXPIRE', key, window * 2)
 return 1
 """
@@ -60,12 +62,9 @@ class RateLimiter:
         key = f"feedsystem:ratelimit:{self.prefix}:{subject}"
         now_ms = int(time.time() * 1000)
 
-        if not redis_client._available:
-            return
-
         try:
-            script = redis_client._redis.register_script(_SLIDING_WINDOW_SCRIPT)
-            allowed = await script(
+            allowed = await redis_client.eval_script(
+                _SLIDING_WINDOW_SCRIPT,
                 keys=[key],
                 args=[now_ms, self.window_seconds, self.max_requests],
             )

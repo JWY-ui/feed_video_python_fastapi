@@ -9,9 +9,10 @@ export async function listLatest(input: { limit: number; latest_time: number }) 
 
 export async function listLikesCount(input: { limit: number; likes_count_before?: number; id_before?: number }) {
   const body: Record<string, unknown> = { limit: input.limit }
-  if (typeof input.likes_count_before === 'number' || typeof input.id_before === 'number') {
-    body.likes_count_before = input.likes_count_before ?? 0
-    body.id_before = input.id_before ?? 0
+  // Both cursor params must be present together for pagination; otherwise first page.
+  if (typeof input.likes_count_before === 'number' && typeof input.id_before === 'number') {
+    body.likes_count_before = input.likes_count_before
+    body.id_before = input.id_before
   }
   const res = await postJson<ListLikesCountResponse>('/feed/listLikesCount', body)
   return { ...res, video_list: normalizeFeedVideoList(res.video_list) }

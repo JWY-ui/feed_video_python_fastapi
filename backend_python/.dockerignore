@@ -1,0 +1,13 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.idea
+.vscode
+.env
+*.md
+node_modules
+dist
+*.log
+.DS_Store
+Thumbs.db

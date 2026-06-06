@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Like data access layer."""
 from sqlalchemy import select, func, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.like import Like
@@ -30,11 +31,21 @@ class LikeRepository:
         return result.scalar() > 0
 
     async def create_ignore_duplicate(self, **kwargs) -> bool:
-        """Returns True=newly created, False=already exists."""
+        """
+        Returns True=newly created, False=already exists.
+
+        Check-then-insert has a race window under concurrency.
+        We catch IntegrityError at flush time as the DB-level last line of defense,
+        and return False (already liked) instead of crashing with 500.
+        """
         if await self.is_liked(kwargs["video_id"], kwargs["account_id"]):
             return False
         self.db.add(Like(**kwargs))
-        return True
+        try:
+            await self.db.flush()
+            return True
+        except IntegrityError:
+            return False
 
     async def delete_by_video_and_account(self, video_id: int, account_id: int) -> bool:
         stmt = delete(Like).where(Like.video_id == video_id, Like.account_id == account_id)

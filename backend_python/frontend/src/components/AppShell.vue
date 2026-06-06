@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-
 import { useAuthStore } from '../stores/auth'
 import { useSocialStore } from '../stores/social'
 import Toaster from './Toaster.vue'
+import UserAvatar from './UserAvatar.vue'
 
 const props = defineProps<{ full?: boolean }>()
 
@@ -13,95 +13,67 @@ const social = useSocialStore()
 const router = useRouter()
 const route = useRoute()
 
-const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
-watch(
-  () => route.query.q,
-  (v) => {
-    search.value = typeof v === 'string' ? v : ''
-  },
-)
-
 watch(
   () => auth.isLoggedIn,
-  (v) => {
-    if (v) void social.refreshMine()
-    else social.clear()
-  },
+  (v) => { if (v) void social.refreshMine(); else social.clear() },
   { immediate: true },
 )
 
 const userLabel = computed(() => {
-  if (!auth.isLoggedIn) return '未登录'
-  const username = auth.claims?.username ?? '(unknown)'
-  const accountId = auth.claims?.account_id
-  return accountId ? `${username} #${accountId}` : username
+  if (!auth.isLoggedIn) return '登录'
+  return auth.claims?.username ?? '我'
 })
 
-async function onSearch() {
-  const q = search.value.trim()
-  await router.push({ path: '/', query: q ? { q } : {} })
-}
+const tabs = computed(() => {
+  const base = [
+    { to: '/', label: '推荐', icon: '🏠' },
+    { to: '/hot', label: '热榜', icon: '🔥' },
+    { to: '/video', label: '发布', icon: '➕' },
+    { to: '/messages', label: '私信', icon: '💬', auth: true },
+    { to: '/account', label: '我的', icon: '👤' },
+  ]
+  return base.filter(t => !t.auth || auth.isLoggedIn)
+})
 
-async function goLogin() {
-  await router.push('/account')
-}
-
-async function goSettings() {
-  await router.push('/settings')
+function isTabActive(to: string) {
+  if (to === '/') return route.path === '/' || route.path.startsWith('/feed')
+  return route.path.startsWith(to)
 }
 </script>
 
 <template>
-  <div class="dy-shell">
-    <aside class="dy-aside">
-      <RouterLink class="dy-logo" to="/">ShortVideo</RouterLink>
+  <div class="shell">
+    <!-- Desktop sidebar -->
+    <aside class="sidebar">
+      <RouterLink class="logo" to="/">
+        <span class="logo-icon">▶</span>
+        <span class="logo-text">ShortVideo</span>
+      </RouterLink>
 
-      <nav class="dy-nav">
-        <RouterLink class="dy-nav-link" to="/">推荐</RouterLink>
-        <RouterLink class="dy-nav-link" to="/hot">热榜</RouterLink>
-        <RouterLink class="dy-nav-link" to="/video">发布</RouterLink>
-        <RouterLink class="dy-nav-link" to="/account">账号</RouterLink>
-        <RouterLink v-if="auth.isLoggedIn" class="dy-nav-link" to="/messages">私信</RouterLink>
-        <RouterLink class="dy-nav-link" to="/settings">设置</RouterLink>
+      <nav class="side-nav">
+        <RouterLink
+          v-for="t in tabs" :key="t.to"
+          :to="t.to"
+          class="side-link"
+          :class="{ active: isTabActive(t.to) }"
+        >
+          <span class="side-icon">{{ t.icon }}</span>
+          <span>{{ t.label }}</span>
+        </RouterLink>
       </nav>
 
-      <div class="dy-aside-foot">
-        <div class="dy-user">
-          <span class="dy-user-dot" :class="auth.isLoggedIn ? 'ok' : 'bad'" />
-          <span class="dy-user-name">{{ userLabel }}</span>
-        </div>
-        <div class="dy-user-actions">
-          <button v-if="!auth.isLoggedIn" class="dy-btn dy-btn-primary" type="button" @click="goLogin">登录</button>
-          <button v-else class="dy-btn dy-btn-primary" type="button" @click="goSettings">设置</button>
+      <div class="side-foot">
+        <div class="side-user" @click="router.push('/account')">
+          <UserAvatar :username="userLabel" size="32" />
+          <span class="side-username">{{ userLabel }}</span>
+          <span class="side-dot" :class="auth.isLoggedIn ? 'on' : 'off'" />
         </div>
       </div>
     </aside>
 
-    <div class="dy-main">
-      <header class="dy-topbar">
-        <div class="dy-top-left">
-          <div class="dy-tabs-hint">{{ route.name }}</div>
-        </div>
-
-        <div class="dy-search">
-          <input v-model="search" class="dy-search-input" placeholder="搜索标题 / 作者（本地过滤）" @keydown.enter="onSearch" />
-          <button class="dy-btn dy-btn-primary" type="button" @click="onSearch">搜索</button>
-        </div>
-
-        <div class="dy-top-right">
-          <RouterLink class="dy-btn dy-btn-ghost" to="/video">+ 发布视频</RouterLink>
-        </div>
-      </header>
-
-      <nav class="dy-mobile-nav">
-        <RouterLink class="dy-mobile-link" to="/">推荐</RouterLink>
-        <RouterLink class="dy-mobile-link" to="/hot">热榜</RouterLink>
-        <RouterLink class="dy-mobile-link" to="/video">发布</RouterLink>
-        <RouterLink v-if="auth.isLoggedIn" class="dy-mobile-link" to="/messages">私信</RouterLink>
-        <RouterLink class="dy-mobile-link" to="/account">账号</RouterLink>
-      </nav>
-
-      <div class="dy-content" :class="props.full ? 'full' : 'padded'">
+    <!-- Main content -->
+    <div class="main-area">
+      <div class="content" :class="props.full ? 'full' : 'scroll'">
         <template v-if="props.full">
           <slot />
         </template>
@@ -113,251 +85,131 @@ async function goSettings() {
       </div>
     </div>
 
+    <!-- Mobile bottom tab bar -->
+    <nav class="bottom-tabs">
+      <RouterLink
+        v-for="t in tabs" :key="t.to"
+        :to="t.to"
+        class="tab-item"
+        :class="{ active: isTabActive(t.to) }"
+      >
+        <span class="tab-icon">{{ t.icon }}</span>
+        <span class="tab-label">{{ t.label }}</span>
+      </RouterLink>
+    </nav>
+
     <Toaster />
   </div>
 </template>
 
 <style scoped>
-.dy-shell {
-  height: 100vh;
+/* ═══ Shell layout ═══ */
+.shell {
+  height: 100dvh;
   display: grid;
-  grid-template-columns: 232px 1fr;
-  background: transparent;
+  grid-template-columns: 220px 1fr;
+  background: var(--bg);
 }
 
-.dy-aside {
-  border-right: 1px solid var(--border);
-  background: rgba(12, 16, 23, 0.78);
-  backdrop-filter: blur(18px);
-  padding: 14px 12px;
+/* ═══ Sidebar (desktop) ═══ */
+.sidebar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.dy-logo {
-  font-weight: 900;
-  letter-spacing: 0;
-  font-size: 18px;
-  padding: 10px 10px;
-  border-radius: 8px;
-  background: rgba(43, 161, 255, 0.1);
-  border: 1px solid rgba(43, 161, 255, 0.22);
-  text-decoration: none;
-}
-
-.dy-nav {
-  display: grid;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  padding: 16px 12px;
   gap: 8px;
+  height: 100dvh;
 }
 
-.dy-nav-link {
-  padding: 10px 10px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(246, 248, 251, 0.86);
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 10px; border-radius: var(--r-md);
+  background: var(--pink-gradient);
+  color: #fff;
+  font-weight: 900; font-size: 17px;
+  letter-spacing: -0.01em;
   text-decoration: none;
+  box-shadow: 0 2px 10px oklch(0.62 0.21 4 / 0.22);
+}
+.logo-icon { font-size: 14px; }
+
+.side-nav {
+  display: grid; gap: 4px;
+  flex: 1;
 }
 
-.dy-nav-link.router-link-active {
-  border-color: rgba(43, 161, 255, 0.42);
-  background: rgba(43, 161, 255, 0.14);
-  color: rgba(246, 248, 251, 0.96);
+.side-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 10px; border-radius: var(--r-sm);
+  color: var(--ink-soft); font-size: 14px; font-weight: 500;
+  text-decoration: none;
+  transition: all 140ms var(--ease-out);
 }
+.side-link:hover { background: var(--surface-hover); color: var(--ink); }
+.side-link.active {
+  background: var(--pink-light); color: var(--pink); font-weight: 700;
+}
+.side-icon { font-size: 18px; width: 24px; text-align: center; }
 
-.dy-aside-foot {
+.side-foot {
   margin-top: auto;
-  display: grid;
-  gap: 10px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
-.dy-user {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+.side-user {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; border-radius: var(--r-sm);
+  cursor: pointer; transition: background 120ms;
+}
+.side-user:hover { background: var(--surface-hover); }
+.side-username { font-size: 14px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-dot { width: 8px; height: 8px; border-radius: var(--r-full); flex-shrink: 0; }
+.side-dot.on  { background: var(--ok); box-shadow: 0 0 0 3px oklch(0.58 0.16 150 / 0.15); }
+.side-dot.off { background: var(--faint); }
+
+/* ═══ Main area ═══ */
+.main-area {
+  display: flex; flex-direction: column;
+  min-width: 0; height: 100dvh;
 }
 
-.dy-user-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
-}
+.content { flex: 1; min-height: 0; }
+.content.scroll { overflow-y: auto; }
+.content.full { overflow: hidden; }
 
-.dy-user-dot.ok {
-  background: rgba(34, 197, 94, 1);
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14);
-}
-
-.dy-user-dot.bad {
-  background: rgba(255, 93, 115, 1);
-  box-shadow: 0 0 0 3px rgba(255, 93, 115, 0.14);
-}
-
-.dy-user-name {
-  font-size: 13px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dy-user-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.dy-btn {
-  appearance: none;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-  font-size: 13px;
-}
-
-.dy-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.dy-btn-primary {
-  border-color: rgba(43, 161, 255, 0.5);
-  background: rgba(43, 161, 255, 0.16);
-}
-
-.dy-btn-primary:hover {
-  background: rgba(43, 161, 255, 0.24);
-}
-
-.dy-btn-ghost {
-  border-color: var(--border);
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.dy-main {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.dy-topbar {
-  height: 56px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(12, 16, 23, 0.68);
-  backdrop-filter: blur(18px);
-  display: grid;
-  grid-template-columns: 180px 1fr 180px;
-  gap: 12px;
-  align-items: center;
-  padding: 0 14px;
-}
-
-.dy-tabs-hint {
-  font-size: 12px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0;
-}
-
-.dy-search {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: center;
-  max-width: 680px;
-  width: 100%;
-  justify-self: center;
-}
-
-.dy-search-input {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 10px 14px;
-  outline: none;
-}
-
-.dy-search-input:focus {
-  border-color: rgba(43, 161, 255, 0.52);
-  box-shadow: 0 0 0 3px rgba(43, 161, 255, 0.14);
-}
-
-.dy-top-right {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.dy-content {
-  flex: 1;
-  min-height: 0;
-}
-
-.dy-content.padded {
-  overflow: auto;
-}
-
-.dy-content.full {
-  overflow: hidden;
-}
-
-.dy-mobile-nav {
+/* ═══ Bottom tabs (mobile) ═══ */
+.bottom-tabs {
   display: none;
+  height: 56px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 0 4px;
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
-@media (max-width: 900px) {
-  .dy-shell {
+.tab-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  color: var(--muted); text-decoration: none;
+  font-size: 13px; font-weight: 500;
+  position: relative;
+}
+.tab-item.active {
+  color: var(--pink); font-weight: 700;
+}
+.tab-icon { font-size: 20px; line-height: 1; }
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .shell {
     grid-template-columns: 1fr;
+    grid-template-rows: 1fr 56px;
   }
-  .dy-aside {
-    display: none;
-  }
-  .dy-topbar {
-    grid-template-columns: 1fr;
-    padding: 0 10px;
-  }
-  .dy-top-left {
-    display: none;
-  }
-  .dy-top-right {
-    display: none;
-  }
-  .dy-mobile-nav {
-    height: 48px;
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    border-bottom: 1px solid var(--border);
-    background: rgba(12, 16, 23, 0.74);
-    backdrop-filter: blur(18px);
-  }
-  .dy-mobile-link {
-    display: grid;
-    place-items: center;
-    color: var(--muted);
-    font-size: 13px;
-    text-decoration: none;
-    border-bottom: 2px solid transparent;
-  }
-  .dy-mobile-link.router-link-active {
-    color: var(--text);
-    border-bottom-color: var(--primary);
-  }
-  .dy-search {
-    max-width: none;
-  }
+  .sidebar { display: none; }
+  .bottom-tabs { display: grid; }
+  .content.scroll { padding-bottom: 12px; }
 }
 </style>

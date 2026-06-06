@@ -26,7 +26,7 @@ async def list_all(req: GetAllCommentsRequest, db: AsyncSession = Depends(get_db
     try:
         return await service.get_all(req.video_id)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @protected_router.post("/publish")
@@ -41,7 +41,7 @@ async def publish(req: PublishCommentRequest,
             current_user["username"], req.content,
         )
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
     return {"message": "comment published successfully"}
 
 

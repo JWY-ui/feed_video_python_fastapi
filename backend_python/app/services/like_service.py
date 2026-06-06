@@ -41,7 +41,7 @@ class LikeService:
             raise ValueError("video not found")
 
         created = await self.repo.create_ignore_duplicate(
-            video_id=video_id, account_id=account_id, created_at=datetime.utcnow(),
+            video_id=video_id, account_id=account_id, created_at=datetime.now(datetime.UTC),
         )
         if not created:
             raise ValueError("already liked")

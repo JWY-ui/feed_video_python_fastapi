@@ -47,7 +47,7 @@ def create_access_token(account_id: int, username: str) -> str:
       - iat : issued at
       - nbf : not before, set equal to iat, effective immediately
     """
-    now = datetime.utcnow()
+    now = datetime.now(datetime.UTC)
     payload = {
         "account_id": account_id,
         "username": username,

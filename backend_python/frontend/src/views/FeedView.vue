@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, watch } from 'vue'
-
 import AppShell from '../components/AppShell.vue'
-import JsonBox from '../components/JsonBox.vue'
 import FeedVideoCard from '../components/FeedVideoCard.vue'
+import CommentDrawer from '../components/CommentDrawer.vue'
 import { ApiError } from '../api/client'
 import * as feedApi from '../api/feed'
 import * as likeApi from '../api/like'
@@ -12,251 +11,179 @@ import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 
-type ListState = {
-  loading: boolean
-  error: string
-  items: FeedVideoItem[]
-  has_more: boolean
-}
+type ListState<T = object> = {
+  loading: boolean; error: string; items: FeedVideoItem[]; hasMore: boolean
+} & T
 
-const latest = reactive<ListState & { limit: number; next_time: number }>({
-  loading: false,
-  error: '',
-  items: [],
-  has_more: false,
-  limit: 10,
-  next_time: 0,
+const latest = reactive<ListState & { nextTime: number }>({
+  loading: false, error: '', items: [], hasMore: false, nextTime: 0,
+})
+const hot = reactive<ListState & { nextLikes?: number; nextId?: number }>({
+  loading: false, error: '', items: [], hasMore: false, nextLikes: undefined, nextId: undefined,
+})
+const following = reactive<ListState & { nextTime: number }>({
+  loading: false, error: '', items: [], hasMore: false, nextTime: 0,
 })
 
-const likesCount = reactive<ListState & { limit: number; next_likes_count_before?: number; next_id_before?: number }>({
-  loading: false,
-  error: '',
-  items: [],
-  has_more: false,
-  limit: 10,
-  next_likes_count_before: undefined,
-  next_id_before: undefined,
-})
-
-const following = reactive<ListState & { limit: number; next_time: number }>({
-  loading: false,
-  error: '',
-  items: [],
-  has_more: false,
-  limit: 10,
-  next_time: 0,
-})
-
-const action = reactive<{ loading: boolean; error: string; payload: unknown; name: string }>({
-  loading: false,
-  error: '',
-  payload: null,
-  name: '',
-})
-
+const tab = reactive({ active: 'latest' as 'latest' | 'hot' | 'following' })
+const commentVideo = reactive<{ video: FeedVideoItem | null }>({ video: null })
 const canLike = computed(() => auth.isLoggedIn)
 
-async function runAction(name: string, fn: () => Promise<unknown>) {
-  action.name = name
-  action.loading = true
-  action.error = ''
-  action.payload = null
-  try {
-    action.payload = await fn()
-  } catch (e) {
-    action.error = e instanceof ApiError ? e.message : String(e)
-    action.payload = e instanceof ApiError ? e.payload : null
-  } finally {
-    action.loading = false
-  }
-}
-
 async function loadLatest(reset: boolean) {
-  latest.loading = true
-  latest.error = ''
+  latest.loading = true; latest.error = ''
   try {
-    const latest_time = reset ? 0 : latest.next_time
-    const res = await feedApi.listLatest({ limit: latest.limit, latest_time })
-    latest.has_more = res.has_more
-    latest.next_time = res.next_time
+    const res = await feedApi.listLatest({ limit: 10, latest_time: reset ? 0 : latest.nextTime })
+    latest.hasMore = res.has_more
+    latest.nextTime = res.next_time
     latest.items = reset ? res.video_list : latest.items.concat(res.video_list)
-  } catch (e) {
-    latest.error = e instanceof ApiError ? e.message : String(e)
-  } finally {
-    latest.loading = false
-  }
+  } catch (e) { latest.error = e instanceof ApiError ? e.message : String(e) }
+  finally { latest.loading = false }
 }
 
-async function loadLikesCount(reset: boolean) {
-  likesCount.loading = true
-  likesCount.error = ''
+async function loadHot(reset: boolean) {
+  hot.loading = true; hot.error = ''
   try {
     const res = await feedApi.listLikesCount({
-      limit: likesCount.limit,
-      likes_count_before: reset ? undefined : likesCount.next_likes_count_before,
-      id_before: reset ? undefined : likesCount.next_id_before,
+      limit: 10,
+      likes_count_before: reset ? undefined : hot.nextLikes,
+      id_before: reset ? undefined : hot.nextId,
     })
-    likesCount.has_more = res.has_more
-    likesCount.next_likes_count_before = res.next_likes_count_before
-    likesCount.next_id_before = res.next_id_before
-    likesCount.items = reset ? res.video_list : likesCount.items.concat(res.video_list)
-  } catch (e) {
-    likesCount.error = e instanceof ApiError ? e.message : String(e)
-  } finally {
-    likesCount.loading = false
-  }
+    hot.hasMore = res.has_more
+    hot.nextLikes = res.next_likes_count_before
+    hot.nextId = res.next_id_before
+    hot.items = reset ? res.video_list : hot.items.concat(res.video_list)
+  } catch (e) { hot.error = e instanceof ApiError ? e.message : String(e) }
+  finally { hot.loading = false }
 }
 
 async function loadFollowing(reset: boolean) {
-  following.loading = true
-  following.error = ''
+  following.loading = true; following.error = ''
   try {
-    const latest_time = reset ? 0 : following.next_time
-    const res = await feedApi.listByFollowing({ limit: following.limit, latest_time })
-    following.has_more = res.has_more
-    following.next_time = res.next_time
+    const res = await feedApi.listByFollowing({ limit: 10, latest_time: reset ? 0 : following.nextTime })
+    following.hasMore = res.has_more
+    following.nextTime = res.next_time
     following.items = reset ? res.video_list : following.items.concat(res.video_list)
-  } catch (e) {
-    following.error = e instanceof ApiError ? e.message : String(e)
-  } finally {
-    following.loading = false
-  }
+  } catch (e) { following.error = e instanceof ApiError ? e.message : String(e) }
+  finally { following.loading = false }
 }
+
+const current = computed(() => tab.active === 'hot' ? hot : tab.active === 'following' ? following : latest)
 
 async function toggleLike(item: FeedVideoItem) {
   if (!auth.isLoggedIn) return
-
-  await runAction(item.is_liked ? '取消点赞' : '点赞', async () => {
+  try {
     if (item.is_liked) await likeApi.unlike(item.id)
     else await likeApi.like(item.id)
-
     item.is_liked = !item.is_liked
     item.likes_count = Math.max(0, item.likes_count + (item.is_liked ? 1 : -1))
-    return { ok: true, is_liked: item.is_liked, likes_count: item.likes_count }
-  })
+  } catch (e) { /* toast in useLikeFollow */ }
 }
 
-onMounted(async () => {
-  await loadLatest(true)
-  await loadLikesCount(true)
-  if (auth.isLoggedIn) {
-    await loadFollowing(true)
-  }
-})
+function openComments(item: FeedVideoItem) {
+  commentVideo.video = item
+}
 
-watch(
-  () => auth.isLoggedIn,
-  async (v) => {
-    if (v && following.items.length === 0) {
-      await loadFollowing(true)
-    }
-  },
-)
+onMounted(() => { loadLatest(true); loadHot(true) })
+watch(() => auth.isLoggedIn, (v) => {
+  if (v && following.items.length === 0) loadFollowing(true)
+})
 </script>
 
 <template>
   <AppShell>
-    <div class="grid two">
-      <div class="card">
-        <p class="title">Feed</p>
-        <p class="subtle">`/feed/listLatest` 与 `/feed/listLikesCount` 支持匿名（可选 JWT）；`/feed/listByFollowing` 需要 JWT。</p>
-
-        <div class="card" style="margin-top: 12px">
-          <div class="row" style="justify-content: space-between">
-            <div>
-              <p class="title">最新流（listLatest）</p>
-              <div class="subtle">limit：{{ latest.limit }} · next_time：{{ latest.next_time }} · has_more：{{ latest.has_more }}</div>
-            </div>
-            <div class="row">
-              <label class="subtle" style="margin: 0">limit</label>
-              <input v-model.number="latest.limit" type="number" min="1" max="50" style="width: 90px" />
-              <button class="primary" type="button" :disabled="latest.loading" @click="loadLatest(true)">刷新</button>
-              <button type="button" :disabled="latest.loading || !latest.has_more" @click="loadLatest(false)">加载更多</button>
-            </div>
-          </div>
-          <div v-if="latest.error" class="pill bad" style="margin-top: 10px">错误：{{ latest.error }}</div>
-          <div class="grid" style="gap: 10px; margin-top: 12px">
-            <FeedVideoCard
-              v-for="item in latest.items"
-              :key="`latest-${item.id}`"
-              :item="item"
-              :can-like="canLike"
-              :busy="action.loading"
-              @toggle-like="toggleLike"
-            />
-          </div>
-        </div>
-
-        <div class="card" style="margin-top: 12px">
-          <div class="row" style="justify-content: space-between">
-            <div>
-              <p class="title">点赞数流（listLikesCount）</p>
-              <div class="subtle">
-                limit：{{ likesCount.limit }} · next=(likes={{ likesCount.next_likes_count_before }}, id={{ likesCount.next_id_before }})
-                · has_more：{{ likesCount.has_more }}
-              </div>
-            </div>
-            <div class="row">
-              <label class="subtle" style="margin: 0">limit</label>
-              <input v-model.number="likesCount.limit" type="number" min="1" max="50" style="width: 90px" />
-              <button class="primary" type="button" :disabled="likesCount.loading" @click="loadLikesCount(true)">刷新</button>
-              <button type="button" :disabled="likesCount.loading || !likesCount.has_more" @click="loadLikesCount(false)">
-                加载更多
-              </button>
-            </div>
-          </div>
-          <div v-if="likesCount.error" class="pill bad" style="margin-top: 10px">错误：{{ likesCount.error }}</div>
-          <div class="grid" style="gap: 10px; margin-top: 12px">
-            <FeedVideoCard
-              v-for="item in likesCount.items"
-              :key="`likes-${item.id}`"
-              :item="item"
-              :can-like="canLike"
-              :busy="action.loading"
-              @toggle-like="toggleLike"
-            />
-          </div>
-        </div>
-
-        <div class="card" style="margin-top: 12px">
-          <div class="row" style="justify-content: space-between">
-            <div>
-              <p class="title">关注流（listByFollowing，JWT）</p>
-              <div class="subtle">
-                limit：{{ following.limit }} · next_time：{{ following.next_time }} · has_more：{{ following.has_more }}
-              </div>
-            </div>
-            <div class="row">
-              <label class="subtle" style="margin: 0">limit</label>
-              <input v-model.number="following.limit" type="number" min="1" max="50" style="width: 90px" />
-              <button class="primary" type="button" :disabled="following.loading" @click="loadFollowing(true)">刷新</button>
-              <button type="button" :disabled="following.loading || !following.has_more" @click="loadFollowing(false)">加载更多</button>
-            </div>
-          </div>
-          <div v-if="!auth.isLoggedIn" class="pill bad" style="margin-top: 10px">未登录：无法访问关注流</div>
-          <div v-if="following.error" class="pill bad" style="margin-top: 10px">错误：{{ following.error }}</div>
-          <div class="grid" style="gap: 10px; margin-top: 12px">
-            <FeedVideoCard
-              v-for="item in following.items"
-              :key="`following-${item.id}`"
-              :item="item"
-              :can-like="canLike"
-              :busy="action.loading"
-              @toggle-like="toggleLike"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <p class="title">动作输出（点赞等）</p>
-        <div class="row" style="margin-bottom: 10px">
-          <span class="pill">动作：{{ action.name || '-' }}</span>
-          <span v-if="action.loading" class="pill">请求中…</span>
-          <span v-if="action.error" class="pill bad">错误：{{ action.error }}</span>
-        </div>
-        <JsonBox :value="action.payload" />
-      </div>
+    <!-- Tab bar -->
+    <div class="feed-tabs">
+      <button
+        v-for="t in [
+          { key: 'latest' as const, label: '最新' },
+          { key: 'hot' as const, label: '热榜' },
+          { key: 'following' as const, label: '关注' },
+        ]"
+        :key="t.key"
+        class="feed-tab"
+        :class="{ active: tab.active === t.key }"
+        @click="tab.active = t.key"
+      >{{ t.label }}</button>
     </div>
+
+    <!-- Feed grid -->
+    <div v-if="current.error" class="empty-msg err">{{ current.error }}</div>
+
+    <div v-if="current.items.length > 0" class="feed-grid">
+      <FeedVideoCard
+        v-for="item in current.items"
+        :key="`${tab.active}-${item.id}`"
+        :item="item"
+        :can-like="canLike"
+        :busy="current.loading"
+        @toggle-like="toggleLike"
+        @open-comments="openComments"
+      />
+    </div>
+
+    <div v-if="current.items.length === 0 && !current.loading" class="empty-msg">
+      {{ tab.active === 'following' ? '还没有关注任何人，去看看热榜吧' : '暂无视频' }}
+    </div>
+
+    <!-- Load more -->
+    <div class="load-more">
+      <template v-if="current.loading">
+        <div class="skeleton" style="height:40px;border-radius:var(--r-sm)" />
+        <div class="skeleton" style="height:40px;border-radius:var(--r-sm);margin-top:8px" />
+      </template>
+      <button
+        v-else-if="current.hasMore"
+        class="ghost" style="width:100%"
+        @click="
+          tab.active === 'hot' ? loadHot(false)
+          : tab.active === 'following' ? loadFollowing(false)
+          : loadLatest(false)
+        "
+      >加载更多</button>
+      <p v-else class="subtle text-center">— 已经到底了 —</p>
+    </div>
+
+    <!-- Comment drawer -->
+    <CommentDrawer v-if="commentVideo.video" :video="commentVideo.video" @close="commentVideo.video = null" />
   </AppShell>
 </template>
+
+<style scoped>
+.feed-tabs {
+  display: flex; gap: 4px;
+  padding: 12px 0 4px;
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bg);
+}
+.feed-tab {
+  border: none; background: none;
+  padding: 10px 22px; border-radius: var(--r-full);
+  font-weight: 600; font-size: 14px; color: var(--muted);
+  cursor: pointer; transition: all 160ms var(--ease-out);
+}
+.feed-tab:hover { color: var(--ink); background: var(--surface-hover); }
+.feed-tab.active {
+  background: var(--pink-gradient);
+  color: #fff; font-weight: 700;
+  box-shadow: 0 2px 8px oklch(0.62 0.21 4 / 0.25);
+}
+
+.feed-grid {
+  display: grid; gap: 14px;
+  padding-top: 12px;
+}
+
+.load-more { margin-top: 20px; }
+
+.empty-msg {
+  padding: 60px 0; text-align: center;
+  color: var(--muted); font-size: 15px;
+}
+.empty-msg.err { color: var(--danger); }
+
+@media (min-width: 640px) {
+  .feed-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+</style>

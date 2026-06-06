@@ -54,7 +54,7 @@ async def get_detail(req: GetDetailRequest,
     try:
         return await service.get_detail(req.id)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ==================== Protected endpoints (require login) ====================
@@ -87,8 +87,7 @@ async def publish_video(req: PublishVideoRequest,
 async def upload_video(file: UploadFile = File(...),
                        current_user: dict = Depends(get_current_user),
                        request: Request = None):
-    await _check_upload_file(file, {".mp4"}, 200 * 1024 * 1024)
-    contents = await file.read()
+    contents = await _read_and_validate(file, {".mp4"}, 200 * 1024 * 1024)
     path = VideoService.save_upload(
         contents, file.filename or "video.mp4", "videos",
         current_user["account_id"], {".mp4"}, 200 * 1024 * 1024,
@@ -101,8 +100,7 @@ async def upload_video(file: UploadFile = File(...),
 async def upload_cover(file: UploadFile = File(...),
                        current_user: dict = Depends(get_current_user),
                        request: Request = None):
-    await _check_upload_file(file, {".jpg", ".jpeg", ".png", ".webp"}, 10 * 1024 * 1024)
-    contents = await file.read()
+    contents = await _read_and_validate(file, {".jpg", ".jpeg", ".png", ".webp"}, 10 * 1024 * 1024)
     path = VideoService.save_upload(
         contents, file.filename or "cover.jpg", "covers",
         current_user["account_id"], {".jpg", ".jpeg", ".png", ".webp"}, 10 * 1024 * 1024,
@@ -198,15 +196,16 @@ async def chunk_complete(req: CompleteChunkRequest,
     return UploadResponse(url=abs_url, play_url=abs_url)
 
 
-async def _check_upload_file(file: UploadFile, allowed_exts: set[str], max_size: int):
+async def _read_and_validate(file: UploadFile, allowed_exts: set[str], max_size: int) -> bytes:
+    """Read file content once and validate size + extension. Returns the file bytes."""
     contents = await file.read()
     if len(contents) == 0 or len(contents) > max_size:
         raise HTTPException(status_code=400,
                             detail=f"invalid file size, max {max_size // (1024*1024)}MB")
-    await file.seek(0)
     _, ext = os.path.splitext(file.filename or "")
     if ext.lower() not in allowed_exts:
         raise HTTPException(status_code=400, detail=f"only {allowed_exts} allowed")
+    return contents
 
 
 def _uploaded_indices(uploaded: list[bool]) -> list[int]:

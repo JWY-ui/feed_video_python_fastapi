@@ -240,6 +240,33 @@ class RedisClient:
         except RedisError:
             pass
 
+    async def eval_script(self, lua_code: str, keys: list[str], args: list) -> int | None:
+        """
+        Execute a Lua script on the Redis server atomically.
+
+        Returns the script's return value, or None if Redis is unavailable.
+        """
+        if not self._available:
+            return None
+        try:
+            script = self._redis.register_script(lua_code)
+            return await script(keys=keys, args=args)
+        except RedisError:
+            return None
+
+    async def zremrangebyrank(self, key: str, start: int, stop: int) -> int:
+        """
+        ZREMRANGEBYRANK -- remove members by rank range.
+
+        Used to trim ZSET timeline to keep only the latest N entries.
+        """
+        if not self._available:
+            return 0
+        try:
+            return await self._redis.zremrangebyrank(key, start, stop)
+        except RedisError:
+            return 0
+
     # ==================== Utility ====================
 
     def key(self, fmt: str, *args) -> str:

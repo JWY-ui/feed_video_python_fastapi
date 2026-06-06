@@ -28,7 +28,7 @@ class CommentService:
         comment_id = await self.repo.create(
             video_id=video_id, author_id=author_id,
             username=username, content=content.strip(),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(datetime.UTC),
         )
 
         await self.video_repo.change_popularity(video_id, 1)

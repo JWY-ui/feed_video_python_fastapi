@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Social data access layer."""
 from sqlalchemy import select, func, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.social import Social
@@ -19,8 +20,19 @@ class SocialRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def follow(self, follower_id: int, vlogger_id: int) -> None:
+    async def follow(self, follower_id: int, vlogger_id: int) -> bool:
+        """
+        Returns True=followed, False=already following (concurrent duplicate).
+
+        Flush immediately to catch IntegrityError from the unique constraint
+        at this point rather than during commit, giving the caller a clean result.
+        """
         self.db.add(Social(follower_id=follower_id, vlogger_id=vlogger_id))
+        try:
+            await self.db.flush()
+            return True
+        except IntegrityError:
+            return False
 
     async def unfollow(self, follower_id: int, vlogger_id: int) -> None:
         await self.db.execute(

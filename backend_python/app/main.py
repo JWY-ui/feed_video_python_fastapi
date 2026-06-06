@@ -21,6 +21,7 @@ Static files: app.mount("/static", ...) serves uploaded videos/avatars via URL.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -96,6 +97,10 @@ async def lifespan(app: FastAPI):
     # If Model fields change, manual ALTER or drop-recreate is needed.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Startup: check JWT secret is not the default (critical security check)
+    if settings.jwt_secret == "change-me-to-a-random-string":
+        print("WARNING: JWT_SECRET is still the default value! Set JWT_SECRET env var in production.")
 
     # Startup: connect to Redis (optional, failure is non-blocking)
     await redis_client.connect()
@@ -180,3 +185,15 @@ async def healthz():
     Does not check DB connectivity -- add DB ping for a more thorough check.
     """
     return {"status": "ok"}
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Catch-all for unhandled exceptions -- prevent leaking internal details."""
+    import traceback
+    print(f"Unhandled error: {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal server error"},
+    )

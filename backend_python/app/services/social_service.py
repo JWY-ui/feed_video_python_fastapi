@@ -21,7 +21,8 @@ class SocialService:
             raise ValueError("vlogger not found")
         if await self.repo.is_followed(follower_id, vlogger_id):
             raise ValueError("already followed")
-        await self.repo.follow(follower_id, vlogger_id)
+        if not await self.repo.follow(follower_id, vlogger_id):
+            raise ValueError("already followed")  # concurrent duplicate caught by DB constraint
 
     async def unfollow(self, follower_id: int, vlogger_id: int) -> None:
         if not await self.repo.is_followed(follower_id, vlogger_id):

@@ -16,6 +16,10 @@ from app.schemas.notification import MarkReadRequest, UnreadCountResponse
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
+# NOTE: SSE client registry is in-process memory.
+# Under multi-worker deployments (gunicorn/uvicorn --workers > 1), SSE connections
+# are distributed across workers. push_sse() only reaches clients on the same worker.
+# For multi-worker SSE: migrate to Redis Pub/Sub as the fan-out backbone.
 _sse_clients: dict[int, list[asyncio.Queue]] = {}
 
 

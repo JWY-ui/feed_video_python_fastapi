@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     redis_db: int = 0
 
     # Tell pydantic-settings to load from .env file
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 # Global singleton

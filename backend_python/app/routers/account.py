@@ -5,7 +5,7 @@ Account module routes -- 12 endpoints. Router only calls Service, never touches 
 import os
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import get_account_service
@@ -20,6 +20,11 @@ from app.services.account_service import AccountService
 
 public_router = APIRouter()
 protected_router = APIRouter(dependencies=[Depends(get_current_user)])
+
+
+def _build_avatar_url(request: Request, path: str) -> str:
+    scheme = request.headers.get("X-Forwarded-Proto", "http")
+    return f"{scheme}://{request.base_url.netloc.rstrip('/')}{path}"
 
 
 # ==================== Public endpoints ====================
@@ -40,7 +45,7 @@ async def login(req: LoginRequest,
     try:
         token, refresh, user = await service.login(req.username, req.password)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=401, detail=str(e))
     return LoginResponse(
         token=token, refresh_token=refresh,
         account_id=user["id"], username=user["username"],
@@ -75,7 +80,7 @@ async def find_by_id(req: FindByIDRequest,
     try:
         user = await service.find_by_id(req.id)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
     return AccountInfo(**{k: v for k, v in user.items() if k in ("id", "username", "avatar_url", "bio")})
 
 
@@ -85,7 +90,7 @@ async def find_by_username(req: FindByUsernameRequest,
     try:
         user = await service.find_by_username(req.username)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
     return AccountInfo(**{k: v for k, v in user.items() if k in ("id", "username", "avatar_url", "bio")})
 
 
@@ -97,7 +102,7 @@ async def get_profile(req: GetProfileRequest,
     try:
         user = await service.find_by_id(req.account_id)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
     return GetProfileResponse(
         account=AccountInfo(**{k: v for k, v in user.items() if k in ("id", "username", "avatar_url", "bio")}),
         video_count=0, total_likes=0, follower_count=0, vlogger_count=0,
@@ -133,7 +138,8 @@ async def rename(req: RenameRequest,
 @protected_router.post("/uploadAvatar")
 async def upload_avatar(file: UploadFile = File(...),
                         current_user: dict = Depends(get_current_user),
-                        service: AccountService = Depends(get_account_service)):
+                        service: AccountService = Depends(get_account_service),
+                        request: Request = None):
     account_id = current_user["account_id"]
     contents = await file.read()
     if len(contents) == 0 or len(contents) > 10 * 1024 * 1024:
@@ -147,7 +153,9 @@ async def upload_avatar(file: UploadFile = File(...),
     filename = secrets.token_hex(16) + ext
     with open(os.path.join(dir_path, filename), "wb") as f:
         f.write(contents)
-    avatar_url = f"http://localhost:8080/static/avatars/{account_id}/{filename}"
+    rel_path = f"/static/avatars/{account_id}/{filename}"
+    # Build absolute URL from request (respects proxy headers like X-Forwarded-Proto)
+    avatar_url = _build_avatar_url(request, rel_path) if request else rel_path
     await service.update_avatar(account_id, avatar_url)
     return {"avatar_url": avatar_url}
 
