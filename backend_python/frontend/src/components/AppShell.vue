@@ -61,6 +61,7 @@ function isTabActive(to: string) {
       </RouterLink>
 
       <nav class="side-nav">
+        <span class="side-label">浏览</span>
         <RouterLink
           v-for="t in tabs" :key="t.to"
           :to="t.to"
@@ -154,39 +155,54 @@ function isTabActive(to: string) {
 .logo-text { flex: 1; }
 
 .side-nav {
-  display: grid; gap: 4px;
-  flex: 1;
+  display: grid; gap: 2px;
+  flex: 1; align-content: start;
+}
+.side-label {
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--muted); padding: 8px 14px 4px; text-transform: uppercase;
 }
 
 .side-link {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 10px; border-radius: var(--r-sm);
-  color: var(--ink-soft); font-size: 14px; font-weight: 500;
-  text-decoration: none;
-  transition: all 140ms var(--ease-out);
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  color: var(--ink-soft); font-size: 0.875rem; font-weight: 500;
+  text-decoration: none; position: relative;
+  transition: all 180ms var(--ease-out);
+}
+.side-link::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 0; border-radius: 0 3px 3px 0;
+  background: var(--pink-gradient);
+  transition: height 200ms var(--ease-out);
 }
 .side-link:hover { background: var(--surface-hover); color: var(--ink); }
+.side-link:hover::before { height: 18px; }
 .side-link.active {
   background: var(--pink-light); color: var(--pink); font-weight: 700;
+  box-shadow: inset 0 0 0 1px oklch(0.88 0.07 4 / 0.5);
 }
-.side-icon { flex-shrink: 0; opacity: 0.7; }
+.side-link.active::before { height: 60%; }
+.side-icon { flex-shrink: 0; opacity: 0.65; transition: opacity 180ms var(--ease-out); }
+.side-link:hover .side-icon { opacity: 0.85; }
 .side-link.active .side-icon { opacity: 1; }
 
 .side-foot {
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
 .side-user {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px; border-radius: var(--r-sm);
-  cursor: pointer; transition: background 120ms;
+  padding: 10px 12px; border-radius: var(--r-md);
+  cursor: pointer; transition: all 160ms var(--ease-out);
+  border: 1px solid transparent;
 }
-.side-user:hover { background: var(--surface-hover); }
-.side-username { font-size: 14px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-dot { width: 8px; height: 8px; border-radius: var(--r-full); flex-shrink: 0; }
-.side-dot.on  { background: var(--ok); box-shadow: 0 0 0 3px oklch(0.58 0.16 150 / 0.15); }
+.side-user:hover { background: var(--surface-hover); border-color: var(--border); }
+.side-username { font-size: 0.875rem; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-dot { width: 9px; height: 9px; border-radius: var(--r-full); flex-shrink: 0; transition: box-shadow 200ms var(--ease-out); }
+.side-dot.on  { background: var(--ok); box-shadow: 0 0 0 3px oklch(0.58 0.16 150 / 0.2); }
 .side-dot.off { background: var(--faint); }
 
 /* ═══ Main area ═══ */
@@ -214,13 +230,20 @@ function isTabActive(to: string) {
 .tab-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   color: var(--muted); text-decoration: none;
-  font-size: 13px; font-weight: 500;
-  position: relative;
+  font-size: 0.6875rem; font-weight: 500;
+  position: relative; transition: color 180ms var(--ease-out);
+}
+.tab-item::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 0; height: 2.5px; border-radius: 0 0 2px 2px;
+  background: var(--pink);
+  transition: width 200ms var(--ease-out);
 }
 .tab-item.active {
   color: var(--pink); font-weight: 700;
 }
-.tab-icon { opacity: 0.65; }
+.tab-item.active::before { width: 28px; }
+.tab-icon { opacity: 0.55; transition: opacity 180ms var(--ease-out); }
 .tab-item.active .tab-icon { opacity: 1; }
 
 /* ═══ Responsive ═══ */

@@ -37,12 +37,18 @@ const drawerOpen = ref(false)
 function openComments(item: FeedVideoItem) { drawerVideo.value = item; drawerOpen.value = true }
 function closeDrawer() { drawerOpen.value = false; drawerVideo.value = null }
 
-const q = computed(() => (typeof route.query.q === 'string' ? route.query.q.trim().toLowerCase() : ''))
+const searchQuery = ref((typeof route.query.q === 'string' ? route.query.q : ''))
+const q = computed(() => searchQuery.value.trim().toLowerCase())
 const filteredItems = computed(() => {
   const items = currentState.value.items
   if (!q.value) return items
   return items.filter((v) => v.title.toLowerCase().includes(q.value) || v.author.username.toLowerCase().includes(q.value))
 })
+function onSearchInput(e: Event) {
+  const val = (e.target as HTMLInputElement).value
+  searchQuery.value = val
+  router.replace({ query: val ? { q: val } : {} })
+}
 const activeItem = computed(() => filteredItems.value[activeIndex.value] ?? null)
 const visibleRange = computed(() => {
   const idx = activeIndex.value
@@ -116,6 +122,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <button class="tab" :class="{ on: tab === 'hot' }" type="button" @click="tab = 'hot'">点赞榜</button>
           <div class="tab-indicator" :class="tab" />
         </div>
+        <div class="tabs-search">
+          <AppIcon name="search" :size="15" class="search-icon" />
+          <input
+            class="search-input"
+            type="text"
+            placeholder="搜索视频或作者…"
+            :value="searchQuery"
+            @input="onSearchInput"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''; router.replace({ query: {} })" aria-label="清除搜索">
+            <AppIcon name="close" :size="13" />
+          </button>
+        </div>
         <div class="tabs-right">
           <button class="tab-chip" type="button" @click="toggleMute">
             <AppIcon :name="muted ? 'mute' : 'unmute'" :size="15" />
@@ -187,8 +206,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <div v-if="item.description" class="desc">{{ item.description }}</div>
             </div>
             <div class="actions">
-              <button class="act act-like" type="button" :class="{ liked: item.is_liked }" :disabled="!!likeBusy[String(item.id)]" @click.stop="toggleLike(item)">
-                <AppIcon :name="item.is_liked ? 'heart-filled' : 'heart'" :size="23" />
+              <button class="act" type="button" :class="{ liked: item.is_liked }" :disabled="!!likeBusy[String(item.id)]" @click.stop="toggleLike(item)">
+                <AppIcon :name="item.is_liked ? 'heart-filled' : 'heart'" :size="22" />
                 <span class="count">{{ item.likes_count }}</span>
               </button>
               <button class="act" type="button" @click.stop="openComments(item)">
@@ -225,27 +244,41 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; background: oklch(0.1 0.012 6); }
-.tabs { height: 52px; display: flex; align-items: center; gap: 0; padding: 0 14px; border-bottom: 1px solid oklch(0.18 0.01 270); background: oklch(0.14 0.008 6); }
+.page { height: 100%; display: flex; flex-direction: column; background: var(--surface); }
+.tabs { height: 52px; display: flex; align-items: center; gap: 0; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .tabs-left { display: flex; gap: 0; position: relative; }
-.tab { border: none; background: none; color: oklch(0.55 0.01 270); padding: 14px 16px; cursor: pointer; font-weight: 600; font-size: 14px; transition: color 160ms var(--ease-out); position: relative; }
-.tab:hover { color: oklch(0.75 0.01 270); }
-.tab.on { color: var(--pink-soft); }
+.tab { border: none; background: none; color: var(--muted); padding: 14px 16px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: color 160ms var(--ease-out); position: relative; }
+.tab:hover { color: var(--ink-soft); }
+.tab.on { color: var(--pink); }
 .tab-indicator { position: absolute; bottom: 0; height: 2.5px; border-radius: 2px; background: var(--pink); transition: left 250ms var(--ease-out), width 250ms var(--ease-out); }
 .tab-indicator.recommend { left: 4px; width: 44px; }
 .tab-indicator.following { left: 72px; width: 44px; }
 .tab-indicator.hot { left: 140px; width: 60px; }
+.tabs-search { display: flex; align-items: center; gap: 6px; margin: 0 8px; flex: 1; max-width: 300px; background: var(--bg); border-radius: var(--r-full); padding: 6px 12px; border: 1px solid var(--border); }
+.search-icon { color: var(--muted); flex-shrink: 0; }
+.search-input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  color: var(--ink); font-size: 0.8125rem; font-family: inherit;
+  padding: 2px 0;
+}
+.search-input::placeholder { color: var(--muted); }
+.search-clear {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  padding: 2px; display: grid; place-items: center;
+}
+.search-clear:hover { color: var(--ink-soft); }
+
 .tabs-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-.tab-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: var(--r-full); border: 1px solid oklch(0.25 0.01 270); background: oklch(0.18 0.008 6); color: oklch(0.65 0.01 270); font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 140ms var(--ease-out); }
-.tab-chip:hover { border-color: var(--pink-soft); color: var(--pink-soft); background: oklch(0.22 0.01 270); }
+.tab-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: var(--r-full); border: 1px solid var(--border); background: var(--bg); color: var(--ink-soft); font-size: 0.75rem; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 140ms var(--ease-out); }
+.tab-chip:hover { border-color: var(--pink-soft); color: var(--pink); background: var(--surface); }
 
 .scroller { flex: 1; min-height: 0; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; background: oklch(0.1 0.012 6); }
 .scroller::-webkit-scrollbar { width: 0; height: 0; }
-.center-hint { height: calc(100% - 60px); display: grid; place-items: center; color: oklch(0.65 0.01 270); }
+.center-hint { height: calc(100% - 60px); display: grid; place-items: center; color: var(--muted); }
 .center-hint.bad { color: var(--danger); }
 .empty-state { text-align: center; padding: 24px; max-width: 320px; }
-.empty-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; color: oklch(0.75 0.01 270); }
-.empty-desc { font-size: 13px; color: oklch(0.55 0.01 270); line-height: 1.5; }
+.empty-title { font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--ink-soft); }
+.empty-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.5; }
 
 .slide { height: 100%; scroll-snap-align: start; display: grid; place-items: center; animation: fadeSlideIn 350ms var(--ease-out); }
 
@@ -276,27 +309,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .act:active { transform: scale(0.92); }
 .act:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
-.act-like {
-  background: oklch(0.16 0.012 6 / 0.6);
-  border-radius: var(--r-full);
-  padding: 10px; width: 48px; height: 48px;
-  margin: 0 auto;
-}
-.act-like.liked {
-  background: var(--pink); color: #fff;
-  box-shadow: 0 0 24px oklch(0.62 0.21 4 / 0.55);
-  animation: heartPop 350ms var(--ease-spring);
-}
-
+.act.liked { color: var(--pink); }
 .act.following { color: var(--pink-soft); }
 .count { font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
-
-@keyframes heartPop {
-  0% { transform: scale(1); }
-  25% { transform: scale(1.3); }
-  50% { transform: scale(0.9); }
-  100% { transform: scale(1); }
-}
 
 .hint { position: absolute; left: 14px; top: 14px; display: flex; gap: 6px; flex-wrap: wrap; }
 .hint .chip { background: oklch(0.14 0.01 6 / 0.55); border-color: oklch(0.3 0.01 270 / 0.2); color: oklch(0.8 0.01 270); font-size: 11px; }

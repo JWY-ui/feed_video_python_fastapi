@@ -4,11 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 
 import AppIcon from '../components/AppIcon.vue'
 import AppShell from '../components/AppShell.vue'
+import CommentDrawer from '../components/CommentDrawer.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import { ApiError } from '../api/client'
-import * as commentApi from '../api/comment'
 import * as likeApi from '../api/like'
-import type { Comment, Video } from '../api/types'
+import type { FeedVideoItem, Video } from '../api/types'
 import * as videoApi from '../api/video'
 import { useAuthStore } from '../stores/auth'
 import { useSocialStore } from '../stores/social'
@@ -30,11 +30,7 @@ const state = reactive({
 
 const muted = ref(true)
 const videoEl = ref<HTMLVideoElement | null>(null)
-
-const drawer = reactive({
-  open: false, loading: false, error: '',
-  comments: [] as Comment[], content: '',
-})
+const drawerVideo = ref<FeedVideoItem | null>(null)
 
 async function needLogin() { toast.error('请先登录'); await router.push('/account') }
 
@@ -90,37 +86,8 @@ async function share() {
   catch { window.prompt('复制链接', url) }
 }
 
-function closeDrawer() { drawer.open = false; drawer.comments = []; drawer.content = ''; drawer.error = '' }
-
-async function loadComments() {
-  if (!state.video) return
-  drawer.loading = true; drawer.error = ''
-  try { drawer.comments = await commentApi.listAll(state.video.id) }
-  catch (e) { drawer.error = e instanceof ApiError ? e.message : String(e) }
-  finally { drawer.loading = false }
-}
-
-async function openComments() { drawer.open = true; drawer.content = ''; await loadComments() }
-
-async function publishComment() {
-  if (!state.video || !auth.isLoggedIn) return needLogin()
-  const content = drawer.content.trim(); if (!content) return
-  drawer.loading = true; drawer.error = ''
-  try { await commentApi.publish(state.video.id, content); drawer.content = ''; await loadComments(); toast.success('评论已发布') }
-  catch (e) { drawer.error = e instanceof ApiError ? e.message : String(e); toast.error(drawer.error) }
-  finally { drawer.loading = false }
-}
-
-function canDeleteComment(c: Comment) { return !!auth.claims?.account_id && auth.claims.account_id === c.author_id }
-
-async function deleteComment(commentId: number) {
-  if (!state.video || !auth.isLoggedIn) return needLogin()
-  if (!window.confirm('确认删除这条评论？')) return
-  drawer.loading = true; drawer.error = ''
-  try { await commentApi.remove(commentId); await loadComments(); toast.info('评论已删除') }
-  catch (e) { drawer.error = e instanceof ApiError ? e.message : String(e); toast.error(drawer.error) }
-  finally { drawer.loading = false }
-}
+function openComments() { if (state.video) { drawerVideo.value = state.video as unknown as FeedVideoItem } }
+function closeDrawer() { drawerVideo.value = null }
 
 watch(() => id.value, async () => { closeDrawer(); await loadVideo(); await loadIsLiked(); await nextTick(); await play() })
 watch(() => auth.isLoggedIn, async () => { await loadIsLiked() })
@@ -157,7 +124,7 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
           </div>
 
           <div class="actions">
-            <button class="act act-like" type="button" :class="{ liked: !!state.isLiked }" :disabled="state.busy" @click.stop="toggleLike">
+            <button class="act" type="button" :class="{ liked: !!state.isLiked }" :disabled="state.busy" @click.stop="toggleLike">
               <AppIcon :name="state.isLiked ? 'heart-filled' : 'heart'" :size="22" />
               <span class="count">{{ state.video.likes_count }}</span>
             </button>
@@ -179,39 +146,18 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
         </div>
       </div>
 
-      <!-- Inline comment drawer -->
-      <div v-if="drawer.open" class="backdrop" @click.self="closeDrawer">
-        <div class="drawer">
-          <div class="drawer-head"><h3>评论</h3><button class="close-btn" @click="closeDrawer" aria-label="关闭"><AppIcon name="close" :size="16" /></button></div>
-          <div class="drawer-body">
-            <div v-if="drawer.loading" class="state-msg">加载中…</div>
-            <div v-else-if="drawer.error" class="state-msg err">{{ drawer.error }}</div>
-            <div v-else-if="drawer.comments.length === 0" class="state-msg">暂无评论</div>
-            <div v-for="c in drawer.comments" :key="c.id" class="comment">
-              <div class="comment-top"><strong>{{ c.username }}</strong><span class="ctime">{{ new Date(c.created_at).toLocaleString('zh-CN') }}</span></div>
-              <div class="comment-body">{{ c.content }}</div>
-              <button v-if="canDeleteComment(c)" class="del-btn" :disabled="drawer.loading" @click="deleteComment(c.id)">删除</button>
-            </div>
-          </div>
-          <div class="drawer-foot">
-            <div class="input-row">
-              <textarea v-model="drawer.content" placeholder="写下你的评论…" :disabled="drawer.loading" rows="2" @keydown.enter.exact.prevent="publishComment" />
-              <button class="primary send-btn" :disabled="drawer.loading || !drawer.content.trim()" @click="publishComment">发送</button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CommentDrawer v-if="drawerVideo" :video="drawerVideo" @close="closeDrawer" />
     </div>
   </AppShell>
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; background: oklch(0.1 0.012 6); }
-.top { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid oklch(0.18 0.01 270); background: oklch(0.14 0.008 6); }
-.back-btn { color: var(--pink-soft); font-weight: 700; text-decoration: none; font-size: 14px; }
+.page { height: 100%; display: flex; flex-direction: column; background: var(--surface); }
+.top { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.back-btn { color: var(--pink); font-weight: 700; text-decoration: none; font-size: 0.875rem; }
 .back-btn:hover { opacity: 0.8; }
-.wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
-.center-hint { color: oklch(0.65 0.01 270); }
+.wrap { flex: 1; min-height: 0; display: grid; place-items: center; background: #000; }
+.center-hint { color: #999; }
 .center-hint.bad { color: var(--danger); }
 
 .stage { width: 100%; height: calc(100dvh - 56px - 48px); position: relative; overflow: hidden; background: oklch(0.06 0.01 6); }
@@ -237,53 +183,15 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
 .act:active { transform: scale(0.92); }
 .act:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
-.act-like { background: oklch(0.16 0.012 6 / 0.6); border-radius: var(--r-full); padding: 10px; width: 48px; height: 48px; margin: 0 auto; }
-.act-like.liked { background: var(--pink); color: #fff; box-shadow: 0 0 24px oklch(0.62 0.21 4 / 0.55); animation: heartPop 350ms var(--ease-spring); }
-
+.act.liked { color: var(--pink); }
 .act.following { color: var(--pink-soft); }
 .count { font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
-
-@keyframes heartPop {
-  0% { transform: scale(1); }
-  25% { transform: scale(1.3); }
-  50% { transform: scale(0.9); }
-  100% { transform: scale(1); }
-}
 .hint { position: absolute; left: 14px; top: 14px; display: flex; gap: 6px; }
 .hint .chip { background: oklch(0.14 0.01 6 / 0.55); border-color: oklch(0.3 0.01 270 / 0.2); color: oklch(0.8 0.01 270); font-size: 11px; }
-
-/* drawer */
-.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 120; display: grid; justify-items: end; }
-.drawer { width: min(400px, 100vw); height: 100dvh; background: var(--surface); display: grid; grid-template-rows: auto 1fr auto; box-shadow: -8px 0 40px rgba(0,0,0,0.08); }
-.drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); }
-.drawer-head h3 { font-size: 16px; font-weight: 800; }
-.close-btn { width: 32px; height: 32px; border-radius: var(--r-sm); border: none; background: var(--bg); color: var(--muted); cursor: pointer; font-size: 16px; display: grid; place-items: center; }
-.drawer-body { overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
-.state-msg { padding: 32px 0; text-align: center; color: var(--muted); font-size: 14px; }
-.state-msg.err { color: var(--danger); }
-.comment { padding: 14px; background: var(--bg); border-radius: var(--r-md); }
-.comment-top { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
-.ctime { font-size: 12px; color: var(--muted); margin-left: auto; }
-.comment-body { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-.del-btn { margin-top: 8px; border: none; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
-.del-btn:hover { color: var(--danger); }
-.drawer-foot { padding: 14px 18px; border-top: 1px solid var(--border); padding-bottom: calc(14px + env(safe-area-inset-bottom, 0)); }
-.input-row { display: flex; gap: 8px; align-items: flex-end; }
-.input-row textarea { flex: 1; min-height: 44px; resize: none; background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; font: inherit; font-size: 14px; outline: none; }
-.send-btn { flex-shrink: 0; padding: 10px 20px; }
-
-.stage { animation: fadeSlideIn 300ms var(--ease-out); }
-
-@keyframes fadeSlideIn {
-  from { opacity: 0.7; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
 
 @media (max-width: 640px) {
   .stage { height: calc(100dvh - 56px - 48px - 24px); border-radius: var(--r-md); }
   .act { min-height: 44px; }
-  .backdrop { justify-items: center; align-items: end; }
-  .drawer { width: 100vw; height: min(70dvh, 500px); border-radius: var(--r-lg) var(--r-lg) 0 0; }
 }
 
 @media (hover: none) {
