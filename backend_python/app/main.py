@@ -18,6 +18,7 @@ Route registration: app.include_router() mounts each module under its prefix.
 Rate limiting: injected via rate_limit Depends during include_router.
 Static files: app.mount("/static", ...) serves uploaded videos/avatars via URL.
 """
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
@@ -76,27 +77,39 @@ async def lifespan(app: FastAPI):
     from app.config import settings
     import asyncmy
 
-    # Startup: create database if not exists
-    # Note: connect without specifying database name, since DB may not exist yet
-    try:
-        conn = await asyncmy.connect(
-            host=settings.mysql_host, port=settings.mysql_port,
-            user=settings.mysql_user, password=settings.mysql_password,
-        )
-        await conn.execute(
-            f"CREATE DATABASE IF NOT EXISTS `{settings.mysql_database}` "
-            f"DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-        )
-        await conn.ensure_closed()
-    except Exception:
-        pass  # Can't reach MySQL -- table creation step will surface the real error
+    # Startup: create database if not exists (with retry)
+    # MySQL may not be fully ready even after healthcheck passes.
+    for attempt in range(10):
+        try:
+            conn = await asyncmy.connect(
+                host=settings.mysql_host, port=settings.mysql_port,
+                user=settings.mysql_user, password=settings.mysql_password,
+            )
+            await conn.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{settings.mysql_database}` "
+                f"DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
+            await conn.ensure_closed()
+            break
+        except Exception:
+            if attempt < 9:
+                await asyncio.sleep(2)
 
-    # Startup: auto-create tables
+    # Startup: auto-create tables (with retry)
     # Base.metadata.create_all() checks each table, creates if missing.
     # Note: only creates tables, does NOT alter existing ones.
     # If Model fields change, manual ALTER or drop-recreate is needed.
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    for attempt in range(10):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            break
+        except Exception:
+            if attempt < 9:
+                print(f"MySQL not ready, retrying ({attempt + 1}/10)...")
+                await asyncio.sleep(2)
+            else:
+                raise
 
     # Startup: check JWT secret is not the default (critical security check)
     if settings.jwt_secret == "change-me-to-a-random-string":

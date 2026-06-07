@@ -16,7 +16,7 @@ Popularity updates:
   Each like +1, unlike -1. GREATEST prevents negative.
   Popularity aggregates likes, comments, follows for hot ranking.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.repositories.like_repo import LikeRepository
 from app.repositories.video_repo import VideoRepository
@@ -41,7 +41,7 @@ class LikeService:
             raise ValueError("video not found")
 
         created = await self.repo.create_ignore_duplicate(
-            video_id=video_id, account_id=account_id, created_at=datetime.now(datetime.UTC),
+            video_id=video_id, account_id=account_id, created_at=datetime.now(timezone.utc),
         )
         if not created:
             raise ValueError("already liked")

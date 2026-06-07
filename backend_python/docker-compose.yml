@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   mysql:
     image: mysql:8.0
@@ -7,20 +5,21 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
       MYSQL_DATABASE: feedsystem
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+      start_period: 40s
 
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "6378:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -33,6 +32,7 @@ services:
     build: .
     ports:
       - "8080:8080"
+    restart: on-failure
     environment:
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306

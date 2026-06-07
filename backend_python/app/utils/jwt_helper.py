@@ -19,7 +19,7 @@ HS256 algorithm:
   - Good for monoliths; microservices should use RS256 (public/private keys)
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
 
@@ -47,7 +47,7 @@ def create_access_token(account_id: int, username: str) -> str:
       - iat : issued at
       - nbf : not before, set equal to iat, effective immediately
     """
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
     payload = {
         "account_id": account_id,
         "username": username,

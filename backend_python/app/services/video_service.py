@@ -5,7 +5,7 @@ Video business logic -- entire chain operates on primitives and dicts.
 import os
 import secrets
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,11 +27,11 @@ class VideoService:
             author_id=author_id, username=username,
             title=title.strip(), description=description.strip(),
             play_url=play_url.strip(), cover_url=cover_url.strip(),
-            create_time=datetime.now(datetime.UTC),
+            create_time=datetime.now(timezone.utc),
         )
         await self.repo.create_outbox_msg(
             video_id=video_id, event_type="video_published",
-            create_time=datetime.now(datetime.UTC), status="pending",
+            create_time=datetime.now(timezone.utc), status="pending",
         )
         tags = extract_tags(f"{title} {description}")
         for tag_name in tags:
@@ -133,7 +133,7 @@ class VideoService:
         ext = ext.lower()
         if ext not in allowed_exts:
             raise ValueError(f"only {allowed_exts} allowed")
-        date_str = datetime.now(datetime.UTC).strftime("%Y%m%d")
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
         dir_path = os.path.join("uploads", subdir, str(author_id), date_str)
         os.makedirs(dir_path, exist_ok=True)
         new_filename = secrets.token_hex(16) + ext
@@ -155,7 +155,7 @@ class VideoService:
     def merge_chunks(upload_id: str, total_chunks: int, filename: str,
                      author_id: int) -> str:
         tmp_dir = os.path.join("uploads", "tmp", upload_id)
-        date_str = datetime.now(datetime.UTC).strftime("%Y%m%d")
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
         out_dir = os.path.join("uploads", "videos", str(author_id), date_str)
         os.makedirs(out_dir, exist_ok=True)
         _, ext = os.path.splitext(filename)

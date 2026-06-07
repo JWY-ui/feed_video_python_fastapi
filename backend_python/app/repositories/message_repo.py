@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Message data access layer."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ class MessageRepository:
     async def send(self, from_id: int, to_id: int, content: str) -> dict:
         m = Message(
             from_id=from_id, to_id=to_id, content=content.strip(),
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
         self.db.add(m)
         await self.db.flush()

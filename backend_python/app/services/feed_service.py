@@ -8,7 +8,7 @@ Five feed types. listLatest and listByPopularity support Redis hot-cold separati
   - Redis unavailable -> all MySQL (degradation tolerance)
 """
 import asyncio
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.repositories.feed_repo import FeedRepository
 from app.repositories.like_repo import LikeRepository
@@ -80,7 +80,7 @@ class FeedService:
 
         # 6. Hot data insufficient -> stitch with cold data
         if len(hot_videos) < limit:
-            cold_cursor = hot_videos[-1]["create_time"] if hot_videos else datetime.fromtimestamp(latest_time_ms / 1000, tz=UTC)
+            cold_cursor = hot_videos[-1]["create_time"] if hot_videos else datetime.fromtimestamp(latest_time_ms / 1000, tz=timezone.utc)
             cold_videos = await self.repo.list_latest(limit - len(hot_videos), cold_cursor)
             hot_videos.extend(cold_videos)
 
@@ -95,7 +95,7 @@ class FeedService:
 
     async def _list_latest_from_mysql(self, limit, latest_time_ms, viewer_id):
         """Pure MySQL fallback path."""
-        before = datetime.fromtimestamp(latest_time_ms / 1000, tz=UTC) if latest_time_ms > 0 else None
+        before = datetime.fromtimestamp(latest_time_ms / 1000, tz=timezone.utc) if latest_time_ms > 0 else None
         videos = await self.repo.list_latest(limit, before)
         items = await self._build_items(videos, viewer_id)
         next_time = 0
@@ -164,16 +164,16 @@ class FeedService:
         """
         # Redis sliding window snapshot
         if redis_client.available:
-            now = datetime.now(UTC).replace(second=0, microsecond=0)
+            now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
             if as_of > 0:
-                now = datetime.fromtimestamp(as_of, tz=UTC).replace(second=0, microsecond=0)
+                now = datetime.fromtimestamp(as_of, tz=timezone.utc).replace(second=0, microsecond=0)
 
             # Last 60 minute windows
             window_keys = []
             for i in range(60):
                 ts = int((now.timestamp() - i * 60))
                 key = redis_client.key("hot:video:1m:%s",
-                                       datetime.fromtimestamp(ts, tz=UTC).strftime("%Y%m%d%H%M"))
+                                       datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y%m%d%H%M"))
                 window_keys.append(key)
 
             dest = redis_client.key("hot:video:merge:1m:%s", now.strftime("%Y%m%d%H%M"))
@@ -214,7 +214,7 @@ class FeedService:
 
     async def list_by_following(self, limit: int, latest_time: int,
                                  viewer_id: int) -> ListByFollowingResponse:
-        before = datetime.fromtimestamp(latest_time, tz=UTC) if latest_time > 0 else None
+        before = datetime.fromtimestamp(latest_time, tz=timezone.utc) if latest_time > 0 else None
         videos = await self.repo.list_by_following(limit, viewer_id, before)
         items = await self._build_items(videos, viewer_id)
         next_time = 0

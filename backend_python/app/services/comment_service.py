@@ -5,7 +5,7 @@ Comment business logic.
 Entire chain operates on dicts and primitives, never imports SQLAlchemy Models.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.repositories.comment_repo import CommentRepository
 from app.repositories.video_repo import VideoRepository
@@ -28,7 +28,7 @@ class CommentService:
         comment_id = await self.repo.create(
             video_id=video_id, author_id=author_id,
             username=username, content=content.strip(),
-            created_at=datetime.now(datetime.UTC),
+            created_at=datetime.now(timezone.utc),
         )
 
         await self.video_repo.change_popularity(video_id, 1)
