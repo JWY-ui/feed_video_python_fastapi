@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSocialStore } from '../stores/social'
+import AppIcon from './AppIcon.vue'
 import Toaster from './Toaster.vue'
 import UserAvatar from './UserAvatar.vue'
 
@@ -12,6 +13,12 @@ const auth = useAuthStore()
 const social = useSocialStore()
 const router = useRouter()
 const route = useRoute()
+
+const isOnline = ref(navigator.onLine)
+function onOnline() { isOnline.value = true }
+function onOffline() { isOnline.value = false }
+onMounted(() => { window.addEventListener('online', onOnline); window.addEventListener('offline', onOffline) })
+onBeforeUnmount(() => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline) })
 
 watch(
   () => auth.isLoggedIn,
@@ -26,11 +33,11 @@ const userLabel = computed(() => {
 
 const tabs = computed(() => {
   const base = [
-    { to: '/', label: '推荐', icon: '🏠' },
-    { to: '/hot', label: '热榜', icon: '🔥' },
-    { to: '/video', label: '发布', icon: '➕' },
-    { to: '/messages', label: '私信', icon: '💬', auth: true },
-    { to: '/account', label: '我的', icon: '👤' },
+    { to: '/', label: '推荐', icon: 'home' as const },
+    { to: '/hot', label: '热榜', icon: 'fire' as const },
+    { to: '/video', label: '发布', icon: 'plus' as const },
+    { to: '/messages', label: '私信', icon: 'chat' as const, auth: true },
+    { to: '/account', label: '我的', icon: 'user' as const },
   ]
   return base.filter(t => !t.auth || auth.isLoggedIn)
 })
@@ -43,10 +50,13 @@ function isTabActive(to: string) {
 
 <template>
   <div class="shell">
+    <!-- Offline banner -->
+    <div v-if="!isOnline" class="offline-bar">离线模式 — 部分功能不可用</div>
+
     <!-- Desktop sidebar -->
     <aside class="sidebar">
       <RouterLink class="logo" to="/">
-        <span class="logo-icon">▶</span>
+        <AppIcon name="play" :size="14" class="logo-icon" />
         <span class="logo-text">ShortVideo</span>
       </RouterLink>
 
@@ -57,7 +67,7 @@ function isTabActive(to: string) {
           class="side-link"
           :class="{ active: isTabActive(t.to) }"
         >
-          <span class="side-icon">{{ t.icon }}</span>
+          <AppIcon :name="t.icon" :size="20" class="side-icon" />
           <span>{{ t.label }}</span>
         </RouterLink>
       </nav>
@@ -93,7 +103,7 @@ function isTabActive(to: string) {
         class="tab-item"
         :class="{ active: isTabActive(t.to) }"
       >
-        <span class="tab-icon">{{ t.icon }}</span>
+        <AppIcon :name="t.icon" :size="22" class="tab-icon" />
         <span class="tab-label">{{ t.label }}</span>
       </RouterLink>
     </nav>
@@ -103,6 +113,14 @@ function isTabActive(to: string) {
 </template>
 
 <style scoped>
+/* ═══ Offline banner ═══ */
+.offline-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+  padding: 10px 16px; text-align: center;
+  background: oklch(0.92 0.06 80); color: oklch(0.45 0.12 80);
+  font-size: 13px; font-weight: 600;
+}
+
 /* ═══ Shell layout ═══ */
 .shell {
   height: 100dvh;
@@ -132,7 +150,8 @@ function isTabActive(to: string) {
   text-decoration: none;
   box-shadow: 0 2px 10px oklch(0.62 0.21 4 / 0.22);
 }
-.logo-icon { font-size: 14px; }
+.logo-icon { color: #fff; flex-shrink: 0; }
+.logo-text { flex: 1; }
 
 .side-nav {
   display: grid; gap: 4px;
@@ -150,7 +169,8 @@ function isTabActive(to: string) {
 .side-link.active {
   background: var(--pink-light); color: var(--pink); font-weight: 700;
 }
-.side-icon { font-size: 18px; width: 24px; text-align: center; }
+.side-icon { flex-shrink: 0; opacity: 0.7; }
+.side-link.active .side-icon { opacity: 1; }
 
 .side-foot {
   margin-top: auto;
@@ -176,7 +196,7 @@ function isTabActive(to: string) {
 }
 
 .content { flex: 1; min-height: 0; }
-.content.scroll { overflow-y: auto; }
+.content.scroll { overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0); }
 .content.full { overflow: hidden; }
 
 /* ═══ Bottom tabs (mobile) ═══ */
@@ -200,7 +220,8 @@ function isTabActive(to: string) {
 .tab-item.active {
   color: var(--pink); font-weight: 700;
 }
-.tab-icon { font-size: 20px; line-height: 1; }
+.tab-icon { opacity: 0.65; }
+.tab-item.active .tab-icon { opacity: 1; }
 
 /* ═══ Responsive ═══ */
 @media (max-width: 768px) {

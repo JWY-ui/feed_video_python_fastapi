@@ -117,7 +117,7 @@ onMounted(loadChat)
 </template>
 
 <style scoped>
-.chat-shell { height: calc(100dvh - 56px - 56px); }
+.chat-shell { height: 100%; display: grid; padding: 16px; }
 
 .panel { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-lg); display: grid; box-shadow: var(--shadow-sm); overflow: hidden; }
 .contact-panel { grid-template-rows: auto 1fr; height: 100%; }
@@ -148,11 +148,11 @@ onMounted(loadChat)
 .mine .bubble { background: var(--pink-bg); }
 .bubble-time { font-size: 11px; color: var(--muted); }
 
-.composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg); align-items: end; }
+.composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0)); border-top: 1px solid var(--border); background: var(--bg); align-items: end; }
 .composer textarea { min-height: 42px; max-height: 100px; resize: vertical; }
 .send-btn { min-width: 72px; height: 42px; }
 
 @media (max-width: 640px) {
-  .chat-shell { height: calc(100dvh - 56px - 56px); }
+  .chat-shell { padding: 0; }
 }
 </style>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import AppIcon from '../components/AppIcon.vue'
 import AppShell from '../components/AppShell.vue'
+import SlideDrawer from '../components/SlideDrawer.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import { ApiError } from '../api/client'
 import * as accountApi from '../api/account'
@@ -17,6 +19,7 @@ const auth = useAuthStore()
 const social = useSocialStore()
 const toast = useToastStore()
 const busy = ref(false)
+const loginErr = ref('')
 const loginForm = reactive({ username: '', password: '' })
 
 const me = computed(() => ({ id: auth.claims?.account_id ?? 0, username: auth.claims?.username ?? '' }))
@@ -53,10 +56,10 @@ function openLikedVideos() { videoTab.value = 'likes'; void loadLikedVideos() }
 async function onLogin() {
   if (busy.value) return
   const username = loginForm.username.trim(); const password = loginForm.password.trim()
-  if (!username || !password) { toast.error('请输入用户名和密码'); return }
-  busy.value = true
+  if (!username || !password) { loginErr.value = !username ? '请输入用户名' : '请输入密码'; return }
+  busy.value = true; loginErr.value = ''
   try { const res = await accountApi.login(username, password); auth.setTokens(res.token, res.refresh_token ?? ''); toast.success('登录成功'); await social.refreshMine(); await loadMyVideos() }
-  catch (e) { toast.error(e instanceof ApiError ? e.message : String(e)) }
+  catch (e) { loginErr.value = e instanceof ApiError ? e.message : String(e) }
   finally { busy.value = false }
 }
 
@@ -81,7 +84,7 @@ async function goUser(id: number) { drawer.open = false; await router.push(`/u/$
 watch(() => auth.isLoggedIn, (v) => {
   if (!v) { drawer.open = false; myVideosReq += 1; myVideos.loading = false; myVideos.items = []; myVideos.error = ''; likedVideosReq += 1; likedVideos.loading = false; likedVideos.loaded = false; likedVideos.items = []; likedVideos.error = ''; videoTab.value = 'works' }
 })
-watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideos(); if (videoTab.value === 'likes') void loadLikedVideos() } }, { immediate: true })
+watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideos(); void loadLikedVideos() } }, { immediate: true })
 </script>
 
 <template>
@@ -91,9 +94,22 @@ watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideo
       <div class="login-card">
         <h2>登录</h2>
         <div class="vstack" style="margin-top:16px">
-          <div><label>用户名</label><input v-model.trim="loginForm.username" autocomplete="username" @keydown.enter="onLogin" /></div>
-          <div><label>密码</label><input v-model.trim="loginForm.password" type="password" autocomplete="current-password" @keydown.enter="onLogin" /></div>
+          <div>
+            <label>用户名</label>
+            <input v-model.trim="loginForm.username" autocomplete="username" placeholder="输入用户名"
+              :class="{ 'input-err': loginErr && !loginForm.username }"
+              @keydown.enter="onLogin" @input="loginErr = ''" />
+            <span v-if="loginErr && !loginForm.username" class="field-err">请输入用户名</span>
+          </div>
+          <div>
+            <label>密码</label>
+            <input v-model.trim="loginForm.password" type="password" autocomplete="current-password" placeholder="输入密码"
+              :class="{ 'input-err': loginErr && !loginForm.password }"
+              @keydown.enter="onLogin" @input="loginErr = ''" />
+            <span v-if="loginErr && !loginForm.password" class="field-err">请输入密码</span>
+          </div>
           <button class="primary" :disabled="busy" @click="onLogin" style="width:100%;padding:14px;font-size:16px">登录</button>
+          <p v-if="loginErr && loginForm.username && loginForm.password" class="field-err text-center">{{ loginErr }}</p>
         </div>
         <div class="row" style="justify-content:space-between;margin-top:16px">
           <button class="ghost" :disabled="busy" @click="goRegister">注册账号</button>
@@ -145,7 +161,7 @@ watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideo
           <div v-else class="video-grid">
             <button v-for="v in myVideos.items" :key="v.id" class="vid-card" @click="goVideo(v.id)">
               <img :src="v.cover_url" :alt="v.title" loading="lazy" />
-              <div class="vid-info"><div class="vid-title">{{ v.title }}</div><div class="subtle">❤️ {{ v.likes_count }}</div></div>
+              <div class="vid-info"><div class="vid-title">{{ v.title }}</div><div class="subtle"><AppIcon name="heart" :size="13" style="vertical-align:middle;margin-right:2px" /> {{ v.likes_count }}</div></div>
             </button>
           </div>
         </template>
@@ -156,7 +172,7 @@ watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideo
           <div v-else class="video-grid">
             <button v-for="v in likedVideos.items" :key="v.id" class="vid-card" @click="goVideo(v.id)">
               <img :src="v.cover_url" :alt="v.title" loading="lazy" />
-              <div class="vid-info"><div class="vid-title">{{ v.title }}</div><div class="subtle">❤️ {{ v.likes_count }}</div></div>
+              <div class="vid-info"><div class="vid-title">{{ v.title }}</div><div class="subtle"><AppIcon name="heart" :size="13" style="vertical-align:middle;margin-right:2px" /> {{ v.likes_count }}</div></div>
             </button>
           </div>
         </template>
@@ -164,18 +180,14 @@ watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideo
     </template>
 
     <!-- Drawer -->
-    <div v-if="drawer.open" class="backdrop" @click.self="closeDrawer">
-      <div class="drawer"><div class="drawer-head"><h3>{{ listTitle }}</h3><button class="close-btn" @click="closeDrawer">✕</button></div>
-        <div class="drawer-body">
-          <div v-if="drawerLoading" class="state-msg">加载中…</div>
-          <div v-else-if="drawerError" class="state-msg err">{{ drawerError }}</div>
-          <div v-else-if="listItems.length === 0" class="state-msg">暂无</div>
-          <button v-for="u in listItems" :key="u.id" class="user-row" @click="goUser(u.id)">
-            <UserAvatar :username="u.username" :id="u.id" :size="40" /><span>@{{ u.username }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <SlideDrawer :title="listTitle" :open="drawer.open" @close="closeDrawer">
+      <div v-if="drawerLoading" class="state-msg">加载中…</div>
+      <div v-else-if="drawerError" class="state-msg err">{{ drawerError }}</div>
+      <div v-else-if="listItems.length === 0" class="state-msg">暂无</div>
+      <button v-for="u in listItems" :key="u.id" class="user-row" @click="goUser(u.id)">
+        <UserAvatar :username="u.username" :id="u.id" :size="40" /><span>@{{ u.username }}</span>
+      </button>
+    </SlideDrawer>
   </AppShell>
 </template>
 
@@ -183,6 +195,8 @@ watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideo
 .login-wrap { display: grid; justify-items: center; align-content: start; padding: clamp(40px, 12vh, 120px) 16px 40px; }
 .login-card { width: min(420px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px 24px; box-shadow: var(--shadow); }
 .login-card h2 { margin: 0; font-size: 22px; font-weight: 800; }
+.input-err { border-color: var(--danger) !important; }
+.field-err { display: block; font-size: 12px; color: var(--danger); margin-top: 4px; }
 
 .profile-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 24px; box-shadow: var(--shadow-sm); }
 .profile-top { display: flex; align-items: center; gap: 16px; }
@@ -204,13 +218,6 @@ watch(() => me.value.id, (id) => { if (auth.isLoggedIn && id) { void loadMyVideo
 .vid-info { padding: 10px 12px; }
 .vid-title { font-weight: 700; font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-/* drawer */
-.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 120; display: grid; justify-items: center; align-items: center; padding: 16px; }
-.drawer { width: min(420px, 100vw); max-height: 70vh; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; display: grid; grid-template-rows: auto 1fr; box-shadow: var(--shadow-lg); }
-.drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--border); }
-.drawer-head h3 { font-weight: 800; }
-.close-btn { width: 32px; height: 32px; border-radius: var(--r-sm); border: none; background: var(--bg); cursor: pointer; font-size: 16px; }
-.drawer-body { overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
 .state-msg { padding: 24px 0; text-align: center; color: var(--muted); }
 .state-msg.err { color: var(--danger); }
 .user-row { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--bg); cursor: pointer; font: inherit; text-align: left; }

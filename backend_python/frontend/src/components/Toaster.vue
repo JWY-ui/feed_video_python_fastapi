@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppIcon from './AppIcon.vue'
 import { useToastStore } from '../stores/toast'
 
 const toast = useToastStore()
@@ -7,7 +8,7 @@ const toast = useToastStore()
 <template>
   <div class="toast-wrap" aria-live="polite">
     <div v-for="t in toast.toasts" :key="t.id" class="toast" :class="t.type" @click="toast.remove(t.id)">
-      <span class="toast-icon">{{ t.type === 'success' ? '✓' : t.type === 'error' ? '✕' : '·' }}</span>
+      <AppIcon :name="t.type === 'success' ? 'check' : t.type === 'error' ? 'close' : 'more'" :size="14" class="toast-icon-svg" />
       <span class="toast-msg">{{ t.message }}</span>
     </div>
   </div>
@@ -28,17 +29,17 @@ const toast = useToastStore()
   box-shadow: var(--shadow-lg);
   animation: slideDown 300ms var(--ease-out);
 }
-.toast.success { border-left: 3px solid var(--ok); }
-.toast.error   { border-left: 3px solid var(--danger); }
-.toast.info    { border-left: 3px solid var(--pink-soft); }
-.toast-icon {
+.toast.success { background: oklch(0.97 0.03 150); border-color: oklch(0.88 0.06 150); }
+.toast.error   { background: oklch(0.97 0.03 22); border-color: oklch(0.90 0.05 22); }
+.toast.info    { background: oklch(0.97 0.02 4); border-color: oklch(0.90 0.04 4); }
+.toast-icon-svg {
   width: 24px; height: 24px; border-radius: var(--r-full);
+  background: var(--bg); flex-shrink: 0;
   display: grid; place-items: center;
-  font-size: 13px; font-weight: 700; flex-shrink: 0;
 }
-.toast.success .toast-icon { background: oklch(0.95 0.04 150); color: var(--ok); }
-.toast.error   .toast-icon { background: oklch(0.95 0.04 22); color: var(--danger); }
-.toast.info    .toast-icon { background: var(--pink-light); color: var(--pink); }
+.toast.success .toast-icon-svg { background: oklch(0.90 0.08 150); color: var(--ok); }
+.toast.error   .toast-icon-svg { background: oklch(0.92 0.06 22); color: var(--danger); }
+.toast.info    .toast-icon-svg { background: var(--pink-light); color: var(--pink); }
 .toast-msg { font-size: 14px; line-height: 1.4; color: var(--ink); }
 
 @keyframes slideDown {

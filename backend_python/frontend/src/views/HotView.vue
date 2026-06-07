@@ -2,10 +2,10 @@
 import { computed, onMounted, reactive } from 'vue'
 import { ApiError } from '../api/client'
 import * as feedApi from '../api/feed'
-import * as likeApi from '../api/like'
 import type { FeedVideoItem } from '../api/types'
 import AppShell from '../components/AppShell.vue'
 import FeedVideoCard from '../components/FeedVideoCard.vue'
+import { useLikeFollow } from '../composables/useLikeFollow'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 
@@ -13,11 +13,13 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const canLike = computed(() => auth.isLoggedIn)
 
+function needLogin() { toast.error('请先登录') }
+const { likeBusy, toggleLike } = useLikeFollow(needLogin)
+
 const state = reactive({
   loading: false, error: '', items: [] as FeedVideoItem[],
   hasMore: false, limit: 10, asOf: 0, nextOffset: 0,
 })
-const likeBusy = reactive<Record<string, boolean>>({})
 
 async function loadHot(reset: boolean) {
   if (state.loading) return
@@ -28,19 +30,6 @@ async function loadHot(reset: boolean) {
     state.items = reset ? res.video_list : state.items.concat(res.video_list)
   } catch (e) { state.error = e instanceof ApiError ? e.message : String(e) }
   finally { state.loading = false }
-}
-
-async function toggleLike(item: FeedVideoItem) {
-  if (!auth.isLoggedIn) { toast.error('请先登录'); return }
-  const key = String(item.id); if (likeBusy[key]) return
-  likeBusy[key] = true
-  try {
-    if (item.is_liked) await likeApi.unlike(item.id)
-    else await likeApi.like(item.id)
-    item.is_liked = !item.is_liked
-    item.likes_count = Math.max(0, item.likes_count + (item.is_liked ? 1 : -1))
-  } catch (e) { toast.error(e instanceof ApiError ? e.message : String(e)) }
-  finally { likeBusy[key] = false }
 }
 
 onMounted(async () => { await loadHot(true) })
@@ -92,9 +81,9 @@ onMounted(async () => { await loadHot(true) })
   font-weight: 900; font-size: 18px;
   background: var(--bg); color: var(--muted); border: 1px solid var(--border);
 }
-.rank-num.gold   { background: linear-gradient(135deg, #FFD700, #FFA000); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(255,165,0,0.3); }
-.rank-num.silver { background: linear-gradient(135deg, #C0C0C0, #909090); color: #fff; border-color: transparent; }
-.rank-num.bronze { background: linear-gradient(135deg, #CD7F32, #A0522D); color: #fff; border-color: transparent; }
+.rank-num.gold   { background: linear-gradient(135deg, oklch(0.80 0.15 90), oklch(0.68 0.18 70)); color: #fff; border-color: transparent; box-shadow: 0 2px 8px oklch(0.78 0.15 90 / 0.3); }
+.rank-num.silver { background: linear-gradient(135deg, oklch(0.78 0.01 260), oklch(0.62 0.01 260)); color: #fff; border-color: transparent; }
+.rank-num.bronze { background: linear-gradient(135deg, oklch(0.58 0.12 55), oklch(0.48 0.12 40)); color: #fff; border-color: transparent; }
 
 .load-hint { margin-top: 16px; }
 </style>

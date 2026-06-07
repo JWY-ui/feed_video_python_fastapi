@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AppIcon from '../components/AppIcon.vue'
 import AppShell from '../components/AppShell.vue'
+import SlideDrawer from '../components/SlideDrawer.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import { ApiError } from '../api/client'
 import * as accountApi from '../api/account'
@@ -111,24 +113,20 @@ onMounted(loadProfile)
       <div v-else class="video-grid" style="margin-top:12px">
         <button v-for="v in state.videos" :key="v.id" class="vid-card" @click="goVideo(v.id)">
           <img :src="v.cover_url" :alt="v.title" loading="lazy" />
-          <div class="vid-info"><div class="vid-title">{{ v.title }}</div><div class="subtle">❤️ {{ v.likes_count }}</div></div>
+          <div class="vid-info"><div class="vid-title">{{ v.title }}</div><div class="subtle"><AppIcon name="heart" :size="13" style="vertical-align:middle;margin-right:2px" /> {{ v.likes_count }}</div></div>
         </button>
       </div>
     </div>
 
     <!-- Drawer -->
-    <div v-if="drawer.open" class="backdrop" @click.self="closeDrawer">
-      <div class="drawer"><div class="drawer-head"><h3>{{ listTitle }}</h3><button class="close-btn" @click="closeDrawer">✕</button></div>
-        <div class="drawer-body">
-          <div v-if="state.socialLoading" class="state-msg">加载中…</div>
-          <div v-else-if="state.socialError" class="state-msg err">{{ state.socialError }}</div>
-          <div v-else-if="listItems.length === 0" class="state-msg">暂无</div>
-          <button v-for="u in listItems" :key="u.id" class="user-row" @click="goUser(u.id)">
-            <UserAvatar :username="u.username" :id="u.id" :size="40" /><span>@{{ u.username }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <SlideDrawer :title="listTitle" :open="drawer.open" @close="closeDrawer">
+      <div v-if="state.socialLoading" class="state-msg">加载中…</div>
+      <div v-else-if="state.socialError" class="state-msg err">{{ state.socialError }}</div>
+      <div v-else-if="listItems.length === 0" class="state-msg">暂无</div>
+      <button v-for="u in listItems" :key="u.id" class="user-row" @click="goUser(u.id)">
+        <UserAvatar :username="u.username" :id="u.id" :size="40" /><span>@{{ u.username }}</span>
+      </button>
+    </SlideDrawer>
   </AppShell>
 </template>
 
@@ -151,12 +149,6 @@ onMounted(loadProfile)
 .vid-info { padding:10px 12px; }
 .vid-title { font-weight:700; font-size:13px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
-.backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.3); backdrop-filter:blur(4px); z-index:120; }
-.drawer { position:absolute; top:0; right:0; bottom:0; width:min(460px,92vw); background:var(--surface); border-left:1px solid var(--border); box-shadow:var(--shadow-lg); display:grid; grid-template-rows:auto 1fr; overflow:hidden; }
-.drawer-head { display:flex; justify-content:space-between; align-items:center; padding:16px 18px; border-bottom:1px solid var(--border); }
-.drawer-head h3 { font-weight:800; }
-.close-btn { width:32px;height:32px;border-radius:var(--r-sm);border:none;background:var(--bg);cursor:pointer;font-size:16px;display:grid;place-items:center; }
-.drawer-body { overflow-y:auto; padding:14px 18px; display:flex; flex-direction:column; gap:8px; }
 .state-msg { padding:24px 0; text-align:center; color:var(--muted); }
 .state-msg.err { color:var(--danger); }
 .user-row { display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);cursor:pointer;font:inherit;text-align:left;transition:all 140ms; }

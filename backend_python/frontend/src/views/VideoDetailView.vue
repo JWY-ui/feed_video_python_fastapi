@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import AppIcon from '../components/AppIcon.vue'
 import AppShell from '../components/AppShell.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import { ApiError } from '../api/client'
@@ -156,18 +157,18 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
           </div>
 
           <div class="actions">
-            <button class="act" type="button" :disabled="state.busy" @click.stop="toggleLike">
-              <span class="icon" :class="{ liked: !!state.isLiked }">♥</span>
+            <button class="act act-like" type="button" :class="{ liked: !!state.isLiked }" :disabled="state.busy" @click.stop="toggleLike">
+              <AppIcon :name="state.isLiked ? 'heart-filled' : 'heart'" :size="22" />
               <span class="count">{{ state.video.likes_count }}</span>
             </button>
             <button class="act" type="button" @click.stop="openComments">
-              <span class="icon">💬</span><span class="count">评论</span>
+              <AppIcon name="chat" :size="21" /><span class="count">评论</span>
             </button>
-            <button v-if="!auth.claims?.account_id || auth.claims.account_id !== state.video.author_id" class="act" type="button" :disabled="state.busy" @click.stop="toggleFollow">
-              <span class="icon">＋</span><span class="count">{{ social.isFollowing(state.video.author_id) ? '已关注' : '关注' }}</span>
+            <button v-if="!auth.claims?.account_id || auth.claims.account_id !== state.video.author_id" class="act" type="button" :class="{ following: social.isFollowing(state.video.author_id) }" :disabled="state.busy" @click.stop="toggleFollow">
+              <AppIcon :name="social.isFollowing(state.video.author_id) ? 'check' : 'follow'" :size="21" /><span class="count">{{ social.isFollowing(state.video.author_id) ? '已关注' : '关注' }}</span>
             </button>
             <button class="act" type="button" @click.stop="share">
-              <span class="icon">↗</span><span class="count">分享</span>
+              <AppIcon name="share" :size="19" /><span class="count">分享</span>
             </button>
           </div>
 
@@ -181,7 +182,7 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
       <!-- Inline comment drawer -->
       <div v-if="drawer.open" class="backdrop" @click.self="closeDrawer">
         <div class="drawer">
-          <div class="drawer-head"><h3>评论</h3><button class="close-btn" @click="closeDrawer">✕</button></div>
+          <div class="drawer-head"><h3>评论</h3><button class="close-btn" @click="closeDrawer" aria-label="关闭"><AppIcon name="close" :size="16" /></button></div>
           <div class="drawer-body">
             <div v-if="drawer.loading" class="state-msg">加载中…</div>
             <div v-else-if="drawer.error" class="state-msg err">{{ drawer.error }}</div>
@@ -205,32 +206,51 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; background: #000; }
-.top { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
-.back-btn { color: var(--pink); font-weight: 700; text-decoration: none; font-size: 14px; }
+.page { height: 100%; display: flex; flex-direction: column; background: oklch(0.1 0.012 6); }
+.top { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid oklch(0.18 0.01 270); background: oklch(0.14 0.008 6); }
+.back-btn { color: var(--pink-soft); font-weight: 700; text-decoration: none; font-size: 14px; }
 .back-btn:hover { opacity: 0.8; }
 .wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
-.center-hint { color: #eee; }
+.center-hint { color: oklch(0.65 0.01 270); }
 .center-hint.bad { color: var(--danger); }
 
-.stage { width: min(980px, 100vw); height: calc(100dvh - 56px - 48px); position: relative; overflow: hidden; background: #000; }
+.stage { width: 100%; height: calc(100dvh - 56px - 48px); position: relative; overflow: hidden; background: oklch(0.06 0.01 6); }
 .video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.1) 45%, transparent 70%); pointer-events: none; }
+.grad { position: absolute; inset: 0; background: linear-gradient(to top, oklch(0.06 0.012 6 / 0.85), oklch(0.06 0.012 6 / 0.15) 45%, transparent 70%); pointer-events: none; }
 .meta { position: absolute; left: 16px; bottom: 18px; max-width: min(620px, calc(100% - 96px)); }
-.author-link { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 6px; color: #fff; text-decoration: none; }
-.author-name { color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
-.stage .title { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #fff; }
-.desc { color: rgba(255,255,255,0.8); font-size: 13px; }
-.stage .chip { background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.85); font-size: 11px; }
-.actions { position: absolute; right: 10px; bottom: 18px; display: grid; gap: 10px; }
-.act { width: 64px; border-radius: var(--r-md); border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.35); color: #fff; padding: 10px 6px; cursor: pointer; display: grid; gap: 4px; justify-items: center; backdrop-filter: blur(6px); }
-.act:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
-.act:disabled { opacity: 0.5; transform: none; }
-.icon { font-size: 22px; }
-.icon.liked { color: var(--pink); filter: drop-shadow(0 0 6px oklch(0.62 0.21 4 / 0.5)); }
-.count { font-size: 11px; }
+.author-link { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 6px; color: oklch(0.95 0.005 6); text-decoration: none; }
+.author-name { color: oklch(0.95 0.005 6); text-shadow: 0 2px 8px oklch(0 0 0 / 0.5); }
+.stage .title { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: oklch(0.95 0.005 6); }
+.desc { color: oklch(0.85 0.005 6 / 0.8); font-size: 13px; }
+.stage .chip { background: oklch(0.14 0.01 6 / 0.55); border-color: oklch(0.3 0.01 270 / 0.2); color: oklch(0.8 0.01 270); font-size: 11px; }
+.actions { position: absolute; right: 12px; bottom: 24px; display: grid; gap: 12px; }
+.act {
+  display: grid; gap: 4px; justify-items: center;
+  border: none; padding: 8px 4px; border-radius: var(--r-md);
+  cursor: pointer; color: oklch(0.95 0.005 6);
+  background: oklch(0.14 0.01 6 / 0.55);
+  backdrop-filter: blur(10px);
+  transition: all 160ms var(--ease-out);
+  min-width: 56px;
+}
+.act:hover { background: oklch(0.22 0.015 6 / 0.6); color: oklch(0.98 0.002 6); transform: scale(1.06); }
+.act:active { transform: scale(0.92); }
+.act:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+.act-like { background: oklch(0.16 0.012 6 / 0.6); border-radius: var(--r-full); padding: 10px; width: 48px; height: 48px; margin: 0 auto; }
+.act-like.liked { background: var(--pink); color: #fff; box-shadow: 0 0 24px oklch(0.62 0.21 4 / 0.55); animation: heartPop 350ms var(--ease-spring); }
+
+.act.following { color: var(--pink-soft); }
+.count { font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
+
+@keyframes heartPop {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.3); }
+  50% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
 .hint { position: absolute; left: 14px; top: 14px; display: flex; gap: 6px; }
-.hint .chip { background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.85); font-size: 11px; }
+.hint .chip { background: oklch(0.14 0.01 6 / 0.55); border-color: oklch(0.3 0.01 270 / 0.2); color: oklch(0.8 0.01 270); font-size: 11px; }
 
 /* drawer */
 .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 120; display: grid; justify-items: end; }
@@ -252,9 +272,25 @@ onMounted(async () => { await loadVideo(); await loadIsLiked(); await nextTick()
 .input-row textarea { flex: 1; min-height: 44px; resize: none; background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; font: inherit; font-size: 14px; outline: none; }
 .send-btn { flex-shrink: 0; padding: 10px 20px; }
 
+.stage { animation: fadeSlideIn 300ms var(--ease-out); }
+
+@keyframes fadeSlideIn {
+  from { opacity: 0.7; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 @media (max-width: 640px) {
   .stage { height: calc(100dvh - 56px - 48px - 24px); border-radius: var(--r-md); }
+  .act { min-height: 44px; }
   .backdrop { justify-items: center; align-items: end; }
   .drawer { width: 100vw; height: min(70dvh, 500px); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+}
+
+@media (hover: none) {
+  .hint { display: none; }
+}
+
+@media (max-width: 640px) and (orientation: landscape) {
+  .stage { height: 100dvh; }
 }
 </style>

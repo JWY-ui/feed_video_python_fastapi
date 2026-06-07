@@ -5,6 +5,7 @@ import * as commentApi from '../api/comment'
 import type { Comment, FeedVideoItem } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
+import AppIcon from './AppIcon.vue'
 import UserAvatar from './UserAvatar.vue'
 
 const props = defineProps<{ video: FeedVideoItem | null }>()
@@ -77,7 +78,7 @@ defineExpose({ loadComments })
     <div class="drawer">
       <div class="drawer-head">
         <h3 class="drawer-title">评论</h3>
-        <button class="close-btn" type="button" @click="close">✕</button>
+        <button class="close-btn" type="button" @click="close" aria-label="关闭"><AppIcon name="close" :size="16" /></button>
       </div>
 
       <div class="drawer-body">

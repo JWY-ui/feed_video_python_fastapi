@@ -43,7 +43,16 @@
 
   /* —— Motion —— */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* —— Reduced motion —— */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* —— Reset —— */
@@ -87,7 +96,17 @@ h3 { font-size: 1.1rem; font-weight: 700; }
 
 /* —— Layout —— */
 .container {
-  max-width: 720px; margin: 0 auto; padding: 16px;
+  width: 100%; max-width: 720px; margin: 0 auto; padding: 16px;
+  min-height: 60vh;
+}
+@media (min-width: 768px) {
+  .container { padding: 24px 20px 48px; }
+}
+@media (min-width: 1024px) {
+  .container { max-width: 960px; padding: 32px 24px 64px; }
+}
+@media (min-width: 1440px) {
+  .container { max-width: 1120px; padding: 40px 28px 80px; }
 }
 
 .grid { display: grid; gap: 14px; }
@@ -188,7 +207,20 @@ button:disabled, .btn:disabled {
   .card { padding: 14px; border-radius: var(--r-sm); }
   .grid.two { grid-template-columns: 1fr; }
   .row { gap: 8px; }
-  button, .btn { padding: 10px 14px; font-size: 13px; }
+  button, .btn { padding: 10px 14px; font-size: 13px; min-height: 44px; }
+}
+
+/* —— Touch adaptation —— */
+@media (pointer: coarse) {
+  button, .btn, [role="button"], a.button, .action-btn, .tab-item, .side-link {
+    min-height: 44px;
+  }
+}
+
+@media (hover: none) {
+  .card:hover { box-shadow: var(--shadow-sm); }
+  .video-card:hover .card-cover img { transform: none; }
+  .video-card:hover .play-icon { opacity: 0; }
 }
 
 /* —— Utility —— */

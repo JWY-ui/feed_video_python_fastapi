@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import AppIcon from '../components/AppIcon.vue'
 import AppShell from '../components/AppShell.vue'
 import CommentDrawer from '../components/CommentDrawer.vue'
 import UserAvatar from '../components/UserAvatar.vue'
@@ -92,11 +93,14 @@ async function onKeydown(e: KeyboardEvent) {
   else if (e.key.toLowerCase() === 'c') { if (activeItem.value) { e.preventDefault(); openComments(activeItem.value) } }
 }
 
+const showHints = ref(true)
+
 onMounted(async () => {
   await ensureTabLoaded()
   await nextTick()
   await playActive(activeItem.value?.id)
   window.addEventListener('keydown', onKeydown)
+  setTimeout(() => { showHints.value = false }, 12000)
 })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
@@ -106,19 +110,57 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   <AppShell full>
     <div class="page">
       <div class="tabs">
-        <button class="tab" :class="{ on: tab === 'recommend' }" type="button" @click="tab = 'recommend'">推荐</button>
-        <button class="tab" :class="{ on: tab === 'following' }" type="button" @click="tab = 'following'">关注</button>
-        <button class="tab" :class="{ on: tab === 'hot' }" type="button" @click="tab = 'hot'">点赞榜</button>
+        <div class="tabs-left">
+          <button class="tab" :class="{ on: tab === 'recommend' }" type="button" @click="tab = 'recommend'">推荐</button>
+          <button class="tab" :class="{ on: tab === 'following' }" type="button" @click="tab = 'following'">关注</button>
+          <button class="tab" :class="{ on: tab === 'hot' }" type="button" @click="tab = 'hot'">点赞榜</button>
+          <div class="tab-indicator" :class="tab" />
+        </div>
         <div class="tabs-right">
-          <button class="chip" type="button" @click="toggleMute">{{ muted ? '静音' : '有声' }}</button>
-          <RouterLink class="chip" :to="activeItem ? `/video/${activeItem.id}` : '/video'">详情</RouterLink>
+          <button class="tab-chip" type="button" @click="toggleMute">
+            <AppIcon :name="muted ? 'mute' : 'unmute'" :size="15" />
+            <span>{{ muted ? '静音' : '有声' }}</span>
+          </button>
+          <RouterLink class="tab-chip" :to="activeItem ? `/video/${activeItem.id}` : '/video'">
+            <AppIcon name="play" :size="14" /><span>详情</span>
+          </RouterLink>
         </div>
       </div>
 
       <div ref="scroller" class="scroller" @scroll="onScroll">
-        <div v-if="currentState.loading && currentState.items.length === 0" class="center-hint">加载中…</div>
-        <div v-else-if="currentState.error && currentState.items.length === 0" class="center-hint bad">{{ currentState.error }}</div>
-        <div v-else-if="filteredItems.length === 0" class="center-hint">没有匹配内容</div>
+        <div v-if="currentState.loading && currentState.items.length === 0" class="center-hint">
+          <div class="empty-state">
+            <div class="skeleton" style="width:280px;height:16px;margin:0 auto" />
+            <div class="skeleton" style="width:180px;height:16px;margin:8px auto 0" />
+          </div>
+        </div>
+        <div v-else-if="currentState.error && currentState.items.length === 0" class="center-hint">
+          <div class="empty-state">
+            <p class="empty-title">加载失败</p>
+            <p class="empty-desc">{{ currentState.error }}</p>
+            <button class="primary" style="margin-top:12px" @click="ensureTabLoaded()">重试</button>
+          </div>
+        </div>
+        <div v-else-if="filteredItems.length === 0 && tab === 'following' && !auth.isLoggedIn" class="center-hint">
+          <div class="empty-state">
+            <p class="empty-title">关注你喜欢的创作者</p>
+            <p class="empty-desc">登录后关注创作者，这里会展示他们的最新视频</p>
+            <RouterLink class="primary" style="margin-top:12px;display:inline-flex;text-decoration:none" to="/account">去登录</RouterLink>
+          </div>
+        </div>
+        <div v-else-if="filteredItems.length === 0 && tab === 'following'" class="center-hint">
+          <div class="empty-state">
+            <p class="empty-title">还没有关注任何人</p>
+            <p class="empty-desc">去热榜发现有趣的创作者，点击关注即可在这里看到他们的视频</p>
+            <button class="primary" style="margin-top:12px" @click="tab = 'hot'">探索热榜</button>
+          </div>
+        </div>
+        <div v-else-if="filteredItems.length === 0" class="center-hint">
+          <div class="empty-state">
+            <p class="empty-title">没有匹配内容</p>
+            <p class="empty-desc">换个关键词试试，或者清空搜索</p>
+          </div>
+        </div>
 
         <section
           v-for="(item, idx) in filteredItems"
@@ -145,28 +187,29 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <div v-if="item.description" class="desc">{{ item.description }}</div>
             </div>
             <div class="actions">
-              <button class="act" type="button" :disabled="!!likeBusy[String(item.id)]" @click.stop="toggleLike(item)">
-                <span class="icon" :class="{ liked: item.is_liked }">♥</span>
+              <button class="act act-like" type="button" :class="{ liked: item.is_liked }" :disabled="!!likeBusy[String(item.id)]" @click.stop="toggleLike(item)">
+                <AppIcon :name="item.is_liked ? 'heart-filled' : 'heart'" :size="23" />
                 <span class="count">{{ item.likes_count }}</span>
               </button>
               <button class="act" type="button" @click.stop="openComments(item)">
-                <span class="icon">💬</span>
+                <AppIcon name="chat" :size="22" />
                 <span class="count">评论</span>
               </button>
               <button
                 v-if="!myAccountId || myAccountId !== item.author.id"
                 class="act" type="button"
+                :class="{ following: social.isFollowing(item.author.id) }"
                 :disabled="!!followBusy[String(item.author.id)]"
                 @click.stop="toggleFollow(item.author.id)">
-                <span class="icon">＋</span>
+                <AppIcon :name="social.isFollowing(item.author.id) ? 'check' : 'follow'" :size="22" />
                 <span class="count">{{ social.isFollowing(item.author.id) ? '已关注' : '关注' }}</span>
               </button>
               <button class="act" type="button" @click.stop="share(item)">
-                <span class="icon">↗</span>
+                <AppIcon name="share" :size="20" />
                 <span class="count">分享</span>
               </button>
             </div>
-            <div class="hint">
+            <div class="hint" :class="{ fading: !showHints }">
               <span class="chip mono">↑ ↓ 切换</span>
               <span class="chip mono">空格 暂停</span>
               <span class="chip mono">M 静音</span>
@@ -182,43 +225,95 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; background: #000; }
-.tabs { height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
-.tab { border: 1.5px solid var(--border); background: var(--surface); color: var(--ink-soft); border-radius: var(--r-full); padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 140ms var(--ease-out); }
-.tab:hover { border-color: var(--pink-soft); color: var(--pink); }
-.tab.on { border-color: transparent; background: var(--pink-gradient); color: #fff; box-shadow: 0 2px 8px oklch(0.62 0.21 4 / 0.25); }
+.page { height: 100%; display: flex; flex-direction: column; background: oklch(0.1 0.012 6); }
+.tabs { height: 52px; display: flex; align-items: center; gap: 0; padding: 0 14px; border-bottom: 1px solid oklch(0.18 0.01 270); background: oklch(0.14 0.008 6); }
+.tabs-left { display: flex; gap: 0; position: relative; }
+.tab { border: none; background: none; color: oklch(0.55 0.01 270); padding: 14px 16px; cursor: pointer; font-weight: 600; font-size: 14px; transition: color 160ms var(--ease-out); position: relative; }
+.tab:hover { color: oklch(0.75 0.01 270); }
+.tab.on { color: var(--pink-soft); }
+.tab-indicator { position: absolute; bottom: 0; height: 2.5px; border-radius: 2px; background: var(--pink); transition: left 250ms var(--ease-out), width 250ms var(--ease-out); }
+.tab-indicator.recommend { left: 4px; width: 44px; }
+.tab-indicator.following { left: 72px; width: 44px; }
+.tab-indicator.hot { left: 140px; width: 60px; }
 .tabs-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.tab-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: var(--r-full); border: 1px solid oklch(0.25 0.01 270); background: oklch(0.18 0.008 6); color: oklch(0.65 0.01 270); font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 140ms var(--ease-out); }
+.tab-chip:hover { border-color: var(--pink-soft); color: var(--pink-soft); background: oklch(0.22 0.01 270); }
 
-.scroller { flex: 1; min-height: 0; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; background: #000; }
+.scroller { flex: 1; min-height: 0; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; background: oklch(0.1 0.012 6); }
 .scroller::-webkit-scrollbar { width: 0; height: 0; }
-.center-hint { height: calc(100% - 60px); display: grid; place-items: center; color: #eee; }
+.center-hint { height: calc(100% - 60px); display: grid; place-items: center; color: oklch(0.65 0.01 270); }
 .center-hint.bad { color: var(--danger); }
+.empty-state { text-align: center; padding: 24px; max-width: 320px; }
+.empty-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; color: oklch(0.75 0.01 270); }
+.empty-desc { font-size: 13px; color: oklch(0.55 0.01 270); line-height: 1.5; }
 
-.slide { height: 100%; scroll-snap-align: start; display: grid; place-items: center; }
-.stage { width: min(980px, 100vw); height: calc(100dvh - 56px - 52px); position: relative; overflow: hidden; background: #000; }
+.slide { height: 100%; scroll-snap-align: start; display: grid; place-items: center; animation: fadeSlideIn 350ms var(--ease-out); }
+
+@keyframes fadeSlideIn {
+  from { opacity: 0.6; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.stage { width: 100%; height: calc(100dvh - 56px - 52px); position: relative; overflow: hidden; background: oklch(0.06 0.01 6); }
 .video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.1) 45%, transparent 70%); pointer-events: none; }
+.grad { position: absolute; inset: 0; background: linear-gradient(to top, oklch(0.06 0.012 6 / 0.85) 0%, oklch(0.06 0.012 6 / 0.15) 45%, transparent 70%); pointer-events: none; }
 .meta { position: absolute; left: 16px; bottom: 18px; max-width: min(620px, calc(100% - 96px)); }
-.author-link { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 6px; text-decoration: none; color: #fff; }
+.author-link { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 6px; text-decoration: none; color: oklch(0.95 0.005 6); }
 .author-link:hover { text-decoration: none; }
-.author-name { text-shadow: 0 2px 8px rgba(0,0,0,0.5); color: #fff; }
-.stage .title { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #fff; }
-.desc { color: rgba(255,255,255,0.8); font-size: 13px; line-height: 1.35; }
-.actions { position: absolute; right: 10px; bottom: 18px; display: grid; gap: 10px; }
-.act { width: 64px; border-radius: var(--r-md); border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.35); color: #fff; padding: 10px 6px; cursor: pointer; display: grid; gap: 4px; justify-items: center; transition: all 120ms var(--ease-out); backdrop-filter: blur(6px); }
-.act:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
-.act:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.icon { font-size: 22px; line-height: 1; }
-.icon.liked { color: var(--pink); filter: drop-shadow(0 0 6px oklch(0.62 0.21 4 / 0.5)); }
-.count { font-size: 11px; }
+.author-name { text-shadow: 0 2px 8px oklch(0 0 0 / 0.5); color: oklch(0.95 0.005 6); }
+.stage .title { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: oklch(0.95 0.005 6); }
+.desc { color: oklch(0.85 0.005 6 / 0.8); font-size: 13px; line-height: 1.35; }
+.actions { position: absolute; right: 12px; bottom: 24px; display: grid; gap: 12px; }
+.act {
+  display: grid; gap: 4px; justify-items: center;
+  border: none; padding: 8px 4px; border-radius: var(--r-md);
+  cursor: pointer; color: oklch(0.95 0.005 6);
+  background: oklch(0.14 0.01 6 / 0.55);
+  backdrop-filter: blur(10px);
+  transition: all 160ms var(--ease-out);
+  min-width: 56px;
+}
+.act:hover { background: oklch(0.22 0.015 6 / 0.6); color: oklch(0.98 0.002 6); transform: scale(1.06); }
+.act:active { transform: scale(0.92); }
+.act:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+.act-like {
+  background: oklch(0.16 0.012 6 / 0.6);
+  border-radius: var(--r-full);
+  padding: 10px; width: 48px; height: 48px;
+  margin: 0 auto;
+}
+.act-like.liked {
+  background: var(--pink); color: #fff;
+  box-shadow: 0 0 24px oklch(0.62 0.21 4 / 0.55);
+  animation: heartPop 350ms var(--ease-spring);
+}
+
+.act.following { color: var(--pink-soft); }
+.count { font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
+
+@keyframes heartPop {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.3); }
+  50% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
 
 .hint { position: absolute; left: 14px; top: 14px; display: flex; gap: 6px; flex-wrap: wrap; }
-.hint .chip { background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.85); font-size: 11px; }
+.hint .chip { background: oklch(0.14 0.01 6 / 0.55); border-color: oklch(0.3 0.01 270 / 0.2); color: oklch(0.8 0.01 270); font-size: 11px; }
 
 @media (max-width: 640px) {
   .stage { height: calc(100dvh - 56px - 52px); }
-  .act { width: 56px; padding: 8px 4px; }
+  .act { width: 56px; padding: 8px 4px; min-height: 44px; }
   .meta { left: 12px; bottom: 14px; }
-  .actions { right: 6px; bottom: 14px; }
+  .actions { right: 6px; bottom: 14px; gap: 8px; }
+}
+
+@media (hover: none) {
+  .hint { display: none; }
+}
+
+@media (max-width: 640px) and (orientation: landscape) {
+  .stage { height: 100dvh; }
+  .tabs { display: none; }
 }
 </style>
