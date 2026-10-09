@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import asyncio
+import weakref
 from typing import Any, AsyncIterator
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -55,6 +57,21 @@ class AgentV3Service:
 
     def __init__(self, graph):
         self._graph = graph
+        # 每个 thread_id 一把锁。同一个会话上的图运行必须串行 —— 否则两个运行会同时
+        # 读写同一份 checkpoint，实测后果是：其中一轮的消息被静默丢掉、checkpointer
+        # 报主键冲突、以及写操作被执行两遍（私信发两条）。
+        # 用 WeakValueDictionary：锁只在有人持有/等待时存活，不会随会话数无限堆积。
+        self._thread_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
+
+    def _lock_for(self, thread_id: str) -> asyncio.Lock:
+        """取这个会话的锁，没有就建一把。"""
+        lock = self._thread_locks.get(thread_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._thread_locks[thread_id] = lock
+        return lock
 
     # ── 会话管理 ────────────────────────────────────────────────
 
@@ -110,8 +127,18 @@ class AgentV3Service:
             "account_id": account_id,
             "username": username,
         }
-        async for event in self._run(state, config):
-            yield event
+        async with self._lock_for(conv["thread_id"]):
+            # 有待确认的操作时不能再开新一轮。实测那样会**静默销毁**那个待确认的
+            # 操作 —— 用户随后点「发送」，写操作一次都不执行，且没有任何报错。
+            snapshot = await self._graph.aget_state(config)
+            if snapshot.interrupts:
+                yield _event("error", {
+                    "message": "还有一条待确认的操作，请先发送或取消它",
+                })
+                return
+
+            async for event in self._run(state, config):
+                yield event
 
     async def confirm(
         self, account_id: int, thread_id: str, approved: bool
@@ -123,10 +150,20 @@ class AgentV3Service:
             return
 
         config = {"configurable": {"thread_id": thread_id}}
-        async for event in self._run(
-            Command(resume={"approved": approved}), config
-        ):
-            yield event
+        async with self._lock_for(thread_id):
+            # 幂等：没有待确认的操作时，重复的「确认」必须是空操作。
+            # 点两下确认卡、或前端重试，第二次 resume 会把 tools 节点再跑一遍，
+            # 于是私信发两条 —— 不可撤回。锁 + 这道检查一起才成立：锁保证两次
+            # 检查不重叠，检查保证第二次什么都不做。
+            snapshot = await self._graph.aget_state(config)
+            if not snapshot.interrupts:
+                yield _event("done", {"thread_id": thread_id, "tool_calls": 0})
+                return
+
+            async for event in self._run(
+                Command(resume={"approved": approved}), config
+            ):
+                yield event
 
     # ── 内部 ────────────────────────────────────────────────────
 

@@ -28,7 +28,11 @@ const showList = ref(false)
 const jumpedTo = ref('')
 const messagesEl = ref<HTMLElement | null>(null)
 
-const canSend = computed(() => draft.value.trim().length > 0 && !agent.busy)
+// 有待确认的操作时，输入框也关掉：新一轮会让那次确认作废（后端也会拒绝，
+// 这是第二道）。让用户先把确认卡处理掉。
+const canSend = computed(
+  () => draft.value.trim().length > 0 && !agent.busy && !agent.hasPending,
+)
 
 const scrollTick = computed(() => {
   const last = agent.entries[agent.entries.length - 1]
@@ -196,8 +200,8 @@ function onKeydown(e: KeyboardEvent) {
         <textarea
           v-model="draft"
           rows="1"
-          placeholder="问点什么…（Enter 发送，Shift+Enter 换行）"
-          :disabled="agent.busy"
+          :placeholder="agent.hasPending ? '请先处理上面的确认…' : '问点什么…（Enter 发送，Shift+Enter 换行）'"
+          :disabled="agent.busy || agent.hasPending"
           @keydown="onKeydown"
         />
         <button class="primary" type="button" :disabled="!canSend" @click="submit">发送</button>
