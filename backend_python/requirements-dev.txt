@@ -1,0 +1,10 @@
+# 开发/测试依赖（生产运行不需要）
+#
+#   pip install -r requirements-dev.txt
+#
+# 运行测试：
+#   cd backend_python && python -m pytest
+-r requirements.txt
+
+pytest==9.1.1
+pytest-asyncio==1.4.0

@@ -19,7 +19,7 @@ Rate limiting: injected via rate_limit Depends during include_router.
 Static files: app.mount("/static", ...) serves uploaded videos/avatars via URL.
 """
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
@@ -51,6 +51,10 @@ from app.routers.feed import public_router as feed_public_router
 from app.routers.feed import protected_router as feed_protected_router
 from app.routers.message import router as message_router
 from app.routers.notification import router as notification_router
+from app.agent_v3 import deps as agent_deps
+from app.agent_v3.graph import build_graph
+from app.agent_v3.router import router as agent_router
+from app.agent_v3.service import AgentV3Service
 
 # Rate limiting config
 from app.middleware.rate_limit import rate_limit
@@ -123,9 +127,41 @@ async def lifespan(app: FastAPI):
     else:
         print("Redis unavailable -- running in degraded mode")
 
+    # Startup: agent_v3 (the floating AI assistant)
+    # No OPENAI_API_KEY -> not assembled at all, and /agent/* returns 503. The agent
+    # has no degraded mode: without a model it could only make things up.
+    # The checkpointer is a hard dependency of the agent (interrupt/resume lives in
+    # it), so if it fails to start we disable the agent loudly rather than leave the
+    # endpoints half-working. Note this is NOT the Redis philosophy -- Redis is
+    # optional, the checkpointer is not.
+    agent_stack = AsyncExitStack()
+    if agent_deps.is_configured():
+        try:
+            from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
+
+            saver = await agent_stack.enter_async_context(
+                AsyncMySaver.from_conn_string(agent_deps.db_uri())
+            )
+            # setup() is async and idempotent (CREATE TABLE IF NOT EXISTS)
+            await saver.setup()
+            agent_deps.init_service(
+                AgentV3Service(
+                    build_graph(llm=agent_deps.build_llm(), checkpointer=saver)
+                )
+            )
+            print(f"agent_v3 ready (model={settings.llm_model})")
+        except Exception:
+            print("agent_v3 init FAILED -- /agent/* will return 503")
+            import traceback
+            traceback.print_exc()
+            agent_deps.init_service(None)
+    else:
+        print("agent_v3 disabled -- OPENAI_API_KEY not set (/agent/* returns 503)")
+
     yield  # Application is running -- requests are processed after this line
 
     # Shutdown: clean up resources
+    await agent_stack.aclose()
     await redis_client.close()
     await engine.dispose()
 
@@ -188,6 +224,9 @@ app.include_router(message_router, prefix="/message", tags=["7. Message"])
 
 # Notification: 4 endpoints (SSE real-time push / list / mark-read / count)
 app.include_router(notification_router, prefix="/notification", tags=["8. Notification"])
+
+# Agent: 6 endpoints (conversations / history / chat SSE / confirm SSE)
+app.include_router(agent_router, prefix="/agent", tags=["9. Agent"])
 
 
 @app.get("/healthz")
