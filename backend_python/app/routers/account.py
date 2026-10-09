@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Account module routes -- 12 endpoints. Router only calls Service, never touches data details.
+Account module routes -- 11 endpoints (7 public + 4 protected). Router only calls Service, never touches data details.
 """
 import os
 import secrets

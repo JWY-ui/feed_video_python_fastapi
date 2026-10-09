@@ -2,7 +2,10 @@
 """
 Feed core algorithms.
 
-Five feed types. listLatest and listByPopularity support Redis hot-cold separation:
+Six feed types (latest / likes / popularity / following / tag / search).
+listLatest has a live Redis hot-cold separation. listByPopularity's Redis
+minute-window path is currently **unwired** -- nothing writes hot:video:1m:*,
+so it always falls back to the MySQL three-column cursor:
   - Hot data uses Redis ZSET (millisecond latency)
   - Cold data falls back to MySQL (index ensures tens of ms)
   - Redis unavailable -> all MySQL (degradation tolerance)

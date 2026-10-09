@@ -61,7 +61,7 @@ class VideoService:
         Video detail -- with Redis cache + anti-stampede lock + random TTL.
 
         Three-layer protection:
-          1. Cache avalanche protection -> random TTL (300 +/- 30 sec), no simultaneous expiry
+          1. Cache avalanche protection -> random TTL (300 + 0..60 sec), no simultaneous expiry
           2. Cache stampede protection -> SETNX mutex lock, only 1 request fills cache
           3. Cache penetration protection -> cache null marker for non-existent videos (60 sec)
 
