@@ -141,8 +141,10 @@ onMounted(loadChat)
 .state-msg.err { color: var(--danger); }
 
 .bubble-row { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: flex-end; }
-.bubble-row.mine { grid-template-columns: 1fr 28px; direction: rtl; }
-.bubble-row.mine > * { direction: ltr; }
+/* 两种行的子元素顺序是一样的：[头像 / 占位符, 气泡]，所以列模板绝不能为 mine 反过来写
+   —— 那会把占位符放进 1fr、把气泡塞进 28px 那一列。中文可以在任意两个字之间断行，
+   于是一句话被显示成"一个字一行"，同时气泡跑到左边。靠右只需要把气泡自己推到行尾。 */
+.bubble-row.mine .bubble-wrap { justify-self: end; }
 .bubble-wrap { max-width: min(72%, 560px); display: grid; gap: 4px; }
 .bubble { padding: 10px 14px; border-radius: var(--r-md); line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-size: 14px; color: var(--ink); background: var(--bg); }
 .mine .bubble { background: var(--pink-bg); }
