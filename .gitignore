@@ -1,0 +1,20 @@
+# —— 密钥 ——
+# .env 里是 API key、数据库密码和 JWT secret。这个仓库此前一直没有 .gitignore，
+# 所以任何一次 `git add -A` 都会把它提交进去 —— 一旦推送，即使随后删除，历史里
+# 仍然留着，GitHub 也可能已经缓存。
+.env
+.env.*
+!.env.example
+
+# —— Python ——
+__pycache__/
+*.py[cod]
+
+# —— 测试 / 工具产物 ——
+.pytest_cache/
+.replay_pid*.log
+replay_pid*.log
+
+# —— 前端 ——
+node_modules/
+dist/
