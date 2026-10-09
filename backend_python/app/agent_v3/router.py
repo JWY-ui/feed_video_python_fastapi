@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.agent_v3.deps import get_service
-from app.agent_v3.schemas import ChatRequest, ConfirmRequest
+from app.agent_v3.schemas import ChatRequest, ConfirmRequest, ThreadRequest
 from app.agent_v3.service import AgentV3Service
 from app.middleware.jwt_auth import get_current_user, get_current_user_stateless
 
@@ -48,7 +48,7 @@ async def create_conversation(
     return await service.create_conversation(user["account_id"])
 
 
-@router.get("/conversations")
+@router.post("/conversations/list")
 async def list_conversations(
     user: dict = Depends(get_current_user),
     service: AgentV3Service = Depends(get_service),
@@ -56,27 +56,27 @@ async def list_conversations(
     return await service.list_conversations(user["account_id"])
 
 
-@router.delete("/conversations/{thread_id}")
+@router.post("/conversations/delete")
 async def delete_conversation(
-    thread_id: str,
+    req: ThreadRequest,
     user: dict = Depends(get_current_user),
     service: AgentV3Service = Depends(get_service),
 ):
     try:
-        await service.delete_conversation(user["account_id"], thread_id)
+        await service.delete_conversation(user["account_id"], req.thread_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="conversation not found")
     return {"message": "deleted"}
 
 
-@router.get("/conversations/{thread_id}/history")
+@router.post("/conversations/history")
 async def get_history(
-    thread_id: str,
+    req: ThreadRequest,
     user: dict = Depends(get_current_user),
     service: AgentV3Service = Depends(get_service),
 ):
     try:
-        return await service.get_history(user["account_id"], thread_id)
+        return await service.get_history(user["account_id"], req.thread_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="conversation not found")
 

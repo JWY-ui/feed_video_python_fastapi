@@ -52,6 +52,7 @@ from app.routers.feed import protected_router as feed_protected_router
 from app.routers.message import router as message_router
 from app.routers.notification import router as notification_router
 from app.agent_v3 import deps as agent_deps
+from app.agent_v3.checkpointer import ensure_checkpoint_collation
 from app.agent_v3.graph import build_graph
 from app.agent_v3.router import router as agent_router
 from app.agent_v3.service import AgentV3Service
@@ -144,6 +145,13 @@ async def lifespan(app: FastAPI):
             )
             # setup() is async and idempotent (CREATE TABLE IF NOT EXISTS)
             await saver.setup()
+            # ...but its DDL inherits the database's collation, which does NOT
+            # match the collation the library's own SQL assumes. Realign them or
+            # the first message fails with "Illegal mix of collations" -- see
+            # app/agent_v3/checkpointer.py for the full story.
+            aligned = await ensure_checkpoint_collation()
+            if aligned:
+                print(f"agent_v3: realigned checkpoint collation for {aligned}")
             agent_deps.init_service(
                 AgentV3Service(
                     build_graph(llm=agent_deps.build_llm(), checkpointer=saver)

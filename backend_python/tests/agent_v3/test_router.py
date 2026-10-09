@@ -82,7 +82,7 @@ async def test_create_then_list_conversations(stub_tools, clean_conversations):
     async with await _client(app) as client:
         created = (await client.post("/agent/conversations")).json()
 
-        listed = (await client.get("/agent/conversations")).json()
+        listed = (await client.post("/agent/conversations/list")).json()
 
     assert [c["thread_id"] for c in listed] == [created["thread_id"]]
 
@@ -127,8 +127,9 @@ async def test_history_returns_the_transcript(stub_tools, clean_conversations):
             "message": "帮我看看", "thread_id": created["thread_id"],
         })
 
-        history = (await client.get(
-            f"/agent/conversations/{created['thread_id']}/history"
+        history = (await client.post(
+            "/agent/conversations/history",
+            json={"thread_id": created["thread_id"]},
         )).json()
 
     assert history[0] == {"role": "user", "content": "帮我看看", "tool_calls": []}
@@ -162,7 +163,10 @@ async def test_deleting_someone_elses_conversation_is_404(stub_tools, clean_conv
     async with await _client(app) as client:
         created = (await client.post("/agent/conversations")).json()
 
-        response = await client.delete("/agent/conversations/nonexistent-thread")
+        response = await client.post(
+            "/agent/conversations/delete",
+            json={"thread_id": "nonexistent-thread"},
+        )
 
     assert response.status_code == 404
     assert created["thread_id"]

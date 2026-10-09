@@ -17,3 +17,9 @@ class ChatRequest(BaseModel):
 class ConfirmRequest(BaseModel):
     thread_id: str = Field(..., min_length=1, max_length=64)
     approved: bool
+
+
+class ThreadRequest(BaseModel):
+    """按 thread_id 定位一个会话（delete / history 共用）。"""
+
+    thread_id: str = Field(..., min_length=1, max_length=64)
