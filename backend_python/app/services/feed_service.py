@@ -18,6 +18,7 @@ from app.schemas.feed import (
     ListByPopularityResponse, ListByFollowingResponse,
 )
 from app.utils.redis_client import redis_client
+from app.utils.timeutil import epoch_ms, epoch_seconds, utc_from_epoch
 
 # Global timeline ZSET key
 TIMELINE_KEY = "feed:global_timeline"
@@ -80,14 +81,14 @@ class FeedService:
 
         # 6. Hot data insufficient -> stitch with cold data
         if len(hot_videos) < limit:
-            cold_cursor = hot_videos[-1]["create_time"] if hot_videos else datetime.fromtimestamp(latest_time_ms / 1000, tz=timezone.utc)
+            cold_cursor = hot_videos[-1]["create_time"] if hot_videos else utc_from_epoch(latest_time_ms / 1000)
             cold_videos = await self.repo.list_latest(limit - len(hot_videos), cold_cursor)
             hot_videos.extend(cold_videos)
 
         items = await self._build_items(hot_videos, viewer_id)
         next_time = 0
         if hot_videos and len(hot_videos) == limit:
-            next_time = int(hot_videos[-1]["create_time"].timestamp() * 1000)
+            next_time = epoch_ms(hot_videos[-1]["create_time"])
 
         return ListLatestResponse(
             video_list=items, next_time=next_time, has_more=len(hot_videos) == limit,
@@ -95,12 +96,12 @@ class FeedService:
 
     async def _list_latest_from_mysql(self, limit, latest_time_ms, viewer_id):
         """Pure MySQL fallback path."""
-        before = datetime.fromtimestamp(latest_time_ms / 1000, tz=timezone.utc) if latest_time_ms > 0 else None
+        before = utc_from_epoch(latest_time_ms / 1000) if latest_time_ms > 0 else None
         videos = await self.repo.list_latest(limit, before)
         items = await self._build_items(videos, viewer_id)
         next_time = 0
         if videos and len(videos) == limit:
-            next_time = int(videos[-1]["create_time"].timestamp() * 1000)
+            next_time = epoch_ms(videos[-1]["create_time"])
         return ListLatestResponse(video_list=items, next_time=next_time, has_more=len(videos) == limit)
 
     async def _rebuild_and_retry(self, limit, latest_time_ms, viewer_id):
@@ -123,7 +124,7 @@ class FeedService:
 
             # Write to ZSET
             mapping = {
-                str(v["id"]): v["create_time"].timestamp() * 1000
+                str(v["id"]): epoch_ms(v["create_time"])
                 for v in db_videos
             }
             await redis_client.zadd(TIMELINE_KEY, mapping)
@@ -214,18 +215,34 @@ class FeedService:
 
     async def list_by_following(self, limit: int, latest_time: int,
                                  viewer_id: int) -> ListByFollowingResponse:
-        before = datetime.fromtimestamp(latest_time, tz=timezone.utc) if latest_time > 0 else None
+        before = utc_from_epoch(latest_time) if latest_time > 0 else None
         videos = await self.repo.list_by_following(limit, viewer_id, before)
         items = await self._build_items(videos, viewer_id)
         next_time = 0
         if videos and len(videos) == limit:
-            next_time = int(videos[-1]["create_time"].timestamp())
+            next_time = epoch_seconds(videos[-1]["create_time"])
         return ListByFollowingResponse(video_list=items, next_time=next_time, has_more=len(videos) == limit)
 
     # ==================== Tag feed ====================
 
     async def list_by_tag(self, tag_name: str, limit: int, viewer_id: int) -> list[FeedVideoItem]:
         videos = await self.repo.list_by_tag(tag_name, limit)
+        return await self._build_items(videos, viewer_id)
+
+    # ==================== Keyword search ====================
+
+    async def search(self, query: str, limit: int, viewer_id: int) -> list[FeedVideoItem]:
+        """
+        Keyword search over title / description / tag.
+
+        Goes through _build_items like every other feed so results carry
+        is_liked for the current viewer -- the agent tool and the /feed/search
+        endpoint both get personalised results for free.
+        """
+        text = query.strip()
+        if not text:
+            return []
+        videos = await self.repo.search(text, limit)
         return await self._build_items(videos, viewer_id)
 
     # ==================== Build feed items ====================
@@ -241,7 +258,7 @@ class FeedService:
                 author=FeedAuthor(id=v["author_id"], username=v["username"]),
                 title=v["title"], description=v.get("description"),
                 play_url=v["play_url"], cover_url=v["cover_url"],
-                create_time=int(v["create_time"].timestamp()) if v["create_time"] else 0,
+                create_time=epoch_seconds(v["create_time"]) if v["create_time"] else 0,
                 likes_count=v["likes_count"],
                 is_liked=liked_map.get(v["id"], False),
             )
@@ -258,7 +275,7 @@ class FeedService:
         """
         if not redis_client.available:
             return
-        score = create_time.timestamp() * 1000
+        score = epoch_ms(create_time)
         await redis_client.zadd(TIMELINE_KEY, {str(video_id): score})
         # Trim: keep latest 1000
         card = await redis_client.zcard(TIMELINE_KEY)

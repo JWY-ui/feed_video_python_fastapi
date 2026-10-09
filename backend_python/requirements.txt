@@ -1,12 +1,24 @@
-fastapi>=0.115.0,<0.116.0
-uvicorn[standard]>=0.33.0,<0.34.0
+fastapi>=0.119.0,<0.120.0
+uvicorn[standard]>=0.37.0,<0.38.0
 sqlalchemy[asyncio]>=2.0.0,<2.1.0
 asyncmy>=0.2.0,<0.3.0
 pydantic>=2.0.0,<3.0.0
 pydantic-settings>=2.0.0,<3.0.0
 python-jose[cryptography]>=3.3.0,<4.0.0
-bcrypt>=4.0.0,<5.0.0
+bcrypt>=5.0.0,<6.0.0
 python-multipart>=0.0.20,<0.0.21
 redis[hiredis]>=5.0.0,<6.0.0
 sse-starlette>=2.0.0,<3.0.0
 python-dotenv>=1.0.0,<2.0.0
+
+# Agent (agent_v3). The project's runtime is the `langchain` conda env
+# (D:\miniconda3\envs\langchain), which ships these exact versions.
+# Pinned exactly on purpose: langgraph 1.x moves fast and the graph code in
+# app/agent_v3/graph.py is written against this API surface. Re-run the agent
+# verification checklist before bumping any of them.
+langgraph==1.2.4
+langchain-core==1.4.3
+langchain-openai==1.3.0
+# MySQL checkpointer for LangGraph. The [asyncmy] extra makes it reuse the same
+# driver as the rest of the project instead of pulling in aiomysql.
+langgraph-checkpoint-mysql[asyncmy]==3.0.0

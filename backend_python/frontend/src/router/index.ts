@@ -10,6 +10,7 @@ import RegisterView from '../views/RegisterView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import UserProfileView from '../views/UserProfileView.vue'
 import MessageView from '../views/MessageView.vue'
+import NotificationView from '../views/NotificationView.vue'
 import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
@@ -27,6 +28,7 @@ const router = createRouter({
     { path: '/u/:id', name: 'user-profile', component: UserProfileView, props: true },
     { path: '/messages', name: 'message-list', component: MessageView, meta: { requiresAuth: true } },
     { path: '/messages/:peerId', name: 'messages', component: MessageView, meta: { requiresAuth: true } },
+    { path: '/notifications', name: 'notifications', component: NotificationView, meta: { requiresAuth: true } },
   ],
 })
 

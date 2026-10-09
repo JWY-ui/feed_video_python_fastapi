@@ -13,6 +13,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.video import Video
 from app.models.social import Social
 from app.models.tag import Tag, VideoTag
+from app.utils.timeutil import as_utc
+
+
+def _escape_like(value: str) -> str:
+    """
+    Neutralize LIKE wildcards in user input.
+
+    Without this, searching for "50%" or "a_b" behaves like a pattern ('%' and
+    '_' are wildcards) and can match far more than the user asked for. MySQL's
+    default LIKE escape character is backslash, so escaping with a backslash and
+    letting the driver pass the pattern as a bound parameter is enough -- no
+    explicit ESCAPE clause needed.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _to_dict(v: Video) -> dict:
@@ -21,7 +35,11 @@ def _to_dict(v: Video) -> dict:
         "id": v.id, "author_id": v.author_id, "username": v.username,
         "title": v.title, "description": v.description,
         "play_url": v.play_url, "cover_url": v.cover_url,
-        "create_time": v.create_time,
+        # as_utc attaches tzinfo: the column holds a naive UTC wall clock, and
+        # FeedService turns this into Unix seconds via .timestamp(). Skipping it
+        # makes Python read the value as local time (an 8h error on UTC+8),
+        # which corrupts every feed cursor. See app/utils/timeutil.py.
+        "create_time": as_utc(v.create_time),
         "likes_count": v.likes_count, "popularity": v.popularity,
     }
 
@@ -207,6 +225,47 @@ class FeedRepository:
             .join(VideoTag, VideoTag.video_id == Video.id)
             .join(Tag, Tag.id == VideoTag.tag_id)
             .where(Tag.name == tag_name)
+            .order_by(Video.create_time.desc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return [_to_dict(r) for r in result.scalars().all()]
+
+    # ==================== 7. Keyword search ====================
+
+    async def search(self, query: str, limit: int) -> list[dict]:
+        """
+        Keyword search over title / description / tag name.
+
+        SQL:
+          SELECT DISTINCT v.* FROM videos v
+          LEFT JOIN video_tags vt ON vt.video_id = v.id
+          LEFT JOIN tags t       ON t.id = vt.tag_id
+          WHERE v.title LIKE ? OR v.description LIKE ? OR t.name LIKE ?
+          ORDER BY v.create_time DESC
+          LIMIT ?
+
+        Like list_by_tag, but with three differences that matter:
+          - LEFT JOIN, not JOIN: a video with no tags must still match on title.
+          - DISTINCT: one video can carry several tags and would otherwise be
+            returned once per matching tag. (MySQL applies DISTINCT before
+            LIMIT, so deduping here rather than in Python keeps the page full.)
+          - ORDER BY create_time DESC uses idx_videos_create_time. The LIKE
+            predicates themselves cannot use an index -- fine at this table size;
+            a FULLTEXT index (ngram parser for Chinese) is the next step if it
+            ever matters.
+        """
+        pattern = f"%{_escape_like(query)}%"
+        stmt = (
+            select(Video)
+            .outerjoin(VideoTag, VideoTag.video_id == Video.id)
+            .outerjoin(Tag, Tag.id == VideoTag.tag_id)
+            .where(
+                Video.title.like(pattern)
+                | Video.description.like(pattern)
+                | Tag.name.like(pattern)
+            )
+            .distinct()
             .order_by(Video.create_time.desc())
             .limit(limit)
         )

@@ -100,3 +100,20 @@ export type GetAllFollowersResponse = {
 export type GetAllVloggersResponse = {
   vloggers: Account[]
 }
+
+export type NotificationType = 'like' | 'comment' | 'follow' | 'mention'
+
+export type Notification = {
+  id: number
+  recipient_id: number
+  sender_id: number
+  type: NotificationType
+  /** video_id for like/comment/mention, follower_id for follow. */
+  target_id: number
+  /** Self-describing text from the server, e.g. "tom 赞了你的视频". */
+  content: string
+  is_read: boolean
+  created_at: string
+}
+
+export type UnreadCountResponse = { count: number }

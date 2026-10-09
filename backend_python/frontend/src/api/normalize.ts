@@ -1,4 +1,4 @@
-import type { Account, Comment, FeedAuthor, FeedVideoItem, Video } from './types'
+import type { Account, Comment, FeedAuthor, FeedVideoItem, Notification, Video } from './types'
 
 export function listOrEmpty<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
@@ -53,5 +53,21 @@ export function normalizeCommentList(value: Comment[] | null | undefined): Comme
     ...comment,
     username: comment.username || '匿名用户',
     content: comment.content || '',
+  }))
+}
+
+/**
+ * POST /notification/list returns a BARE ARRAY, unlike the other list endpoints
+ * which wrap their payload as `{ xxx: [] }`. Use this on the raw response.
+ */
+export function normalizeNotificationList(value: Notification[] | null | undefined): Notification[] {
+  return listOrEmpty(value).map((item) => ({
+    ...item,
+    id: Number(item?.id ?? 0),
+    sender_id: Number(item?.sender_id ?? 0),
+    target_id: Number(item?.target_id ?? 0),
+    content: item?.content || '',
+    is_read: Boolean(item?.is_read),
+    created_at: item?.created_at || '',
   }))
 }

@@ -18,10 +18,11 @@ Used by queries:
 """
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Text, DateTime, func
+from sqlalchemy import String, Integer, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.timeutil import utc_now
 
 
 class Comment(Base):
@@ -37,4 +38,7 @@ class Comment(Base):
     # Comment content. Text type supports long content (MySQL max 65KB).
     content: Mapped[str] = mapped_column(Text)
     # Comment time. List ordered ascending (oldest comments first).
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    # utc_now (Python UTC), not func.now() (MySQL server local time) -- the whole
+    # schema stores UTC wall clocks, so a server-local default would put this one
+    # column on a second clock. See app/utils/timeutil.py.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)

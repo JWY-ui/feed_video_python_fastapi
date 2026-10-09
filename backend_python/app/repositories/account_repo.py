@@ -38,8 +38,17 @@ class AccountRepository:
     # ---- Create ----
 
     async def create(self, username: str, password_hash: str) -> None:
-        """Create user -- pass values, not a Model object."""
+        """Create user -- pass values, not a Model object.
+
+        flush() is deliberate: it forces the unique-username constraint to fire
+        HERE, inside the request, so the router's `except IntegrityError` can
+        turn it into a 409. Without it the INSERT is only sent by the commit in
+        get_db()'s teardown -- which FastAPI runs AFTER the response is sent, so
+        the caller would receive "account created" for a duplicate username and
+        the rollback would happen behind its back.
+        """
         self.db.add(Account(username=username, password=password_hash))
+        await self.db.flush()
 
     # ---- Read ----
 
@@ -146,14 +155,23 @@ class AccountRepository:
         await self.revoke_token_cache(account_id)
 
     async def rename(self, account_id: int, new_username: str, new_token: str) -> None:
-        """Rename + update token (MySQL + Redis)."""
+        """Rename + update token in MySQL. Caller updates the Redis cache.
+
+        flush() is deliberate -- same reason as create(): the unique-username
+        constraint must fire inside the request so the caller can report 409
+        instead of silently succeeding and rolling back afterwards.
+
+        The Redis write deliberately does NOT happen here: if the flush raises,
+        the transaction rolls back but Redis would already hold the new token,
+        leaving cache and DB disagreeing. The caller writes the cache only after
+        this returns without raising.
+        """
         await self.db.execute(
-            update(Account).where(Account.id == account_id).values(username=new_username)
+            update(Account)
+            .where(Account.id == account_id)
+            .values(username=new_username, token=new_token)
         )
-        await self.db.execute(
-            update(Account).where(Account.id == account_id).values(token=new_token)
-        )
-        await self.set_token_cache(account_id, new_token)
+        await self.db.flush()
 
     async def update_avatar(self, account_id: int, avatar_url: str) -> None:
         await self.db.execute(

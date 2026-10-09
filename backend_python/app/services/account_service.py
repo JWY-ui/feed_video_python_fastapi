@@ -120,8 +120,14 @@ class AccountService:
         try:
             await self.repo.rename(account_id, new_username.strip(), new_token)
         except IntegrityError:
+            # The rename rolled back, but the token cache may still hold a
+            # pre-rename entry -- revoke it so the next request re-reads MySQL
+            # instead of trusting a stale value.
+            await self.repo.revoke_token_cache(account_id)
             raise ValueError("username already exists")
 
+        # Only publish the new token to the cache once the DB write is known good.
+        await self.repo.set_token_cache(account_id, new_token)
         return new_token
 
     # ---- Avatar & Bio ----

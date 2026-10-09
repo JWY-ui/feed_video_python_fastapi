@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.like import Like
 from app.models.video import Video
+from app.utils.timeutil import as_utc
 
 
 def _video_to_dict(v: Video) -> dict:
@@ -13,7 +14,9 @@ def _video_to_dict(v: Video) -> dict:
         "id": v.id, "author_id": v.author_id, "username": v.username,
         "title": v.title, "description": v.description,
         "play_url": v.play_url, "cover_url": v.cover_url,
-        "create_time": v.create_time.isoformat() if v.create_time else "",
+        # Emit the offset so any datetime.fromisoformat() downstream lands on an
+        # aware value -- the column itself only holds a naive UTC wall clock.
+        "create_time": as_utc(v.create_time).isoformat() if v.create_time else "",
         "likes_count": v.likes_count, "popularity": v.popularity,
     }
 

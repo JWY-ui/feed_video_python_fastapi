@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.video import Video, OutboxMsg
 from app.models.tag import Tag, VideoTag
+from app.utils.timeutil import as_utc
 
 
 def _to_dict(v: Video) -> dict:
@@ -12,7 +13,10 @@ def _to_dict(v: Video) -> dict:
         "id": v.id, "author_id": v.author_id, "username": v.username,
         "title": v.title, "description": v.description,
         "play_url": v.play_url, "cover_url": v.cover_url,
-        "create_time": v.create_time.isoformat() if v.create_time else "",
+        # Emit the offset so the datetime.fromisoformat() consumers (video
+        # publish -> timeline ZSET score, hot-ranking cursor) get an aware value
+        # instead of one Python would read as local time. See utils/timeutil.py.
+        "create_time": as_utc(v.create_time).isoformat() if v.create_time else "",
         "likes_count": v.likes_count, "popularity": v.popularity,
     }
 

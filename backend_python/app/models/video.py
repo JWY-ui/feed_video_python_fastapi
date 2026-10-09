@@ -31,10 +31,11 @@ Design notes:
 """
 from datetime import datetime
 
-from sqlalchemy import String, Integer, BigInteger, DateTime, func, Index
+from sqlalchemy import String, Integer, BigInteger, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.timeutil import utc_now
 
 
 class Video(Base):
@@ -54,7 +55,8 @@ class Video(Base):
     # Cover image URL (jpg/png/webp file URL).
     cover_url: Mapped[str] = mapped_column(String(255), nullable=False)
     # Creation time. Core sort field for feed cursor pagination.
-    create_time: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    # utc_now, not func.now(): see app/utils/timeutil.py for the time convention.
+    create_time: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     # Like count. +1 on like, -1 on unlike. GREATEST prevents negative.
     likes_count: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     # Popularity score. Likes +1, comments +1, follows +1 all increase popularity.
@@ -86,6 +88,7 @@ class OutboxMsg(Base):
     # Event type: video_published.
     event_type: Mapped[str] = mapped_column(String(50))
     # Creation time (equals video publish time, used for timeline sorting).
-    create_time: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    # utc_now, not func.now(): see app/utils/timeutil.py for the time convention.
+    create_time: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     # Status: pending (to-deliver) / sent (delivered) / failed (needs retry).
     status: Mapped[str] = mapped_column(String(50), index=True, default="pending")

@@ -16,10 +16,11 @@ Used by queries:
 """
 from datetime import datetime
 
-from sqlalchemy import Integer, DateTime, UniqueConstraint, func
+from sqlalchemy import Integer, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.timeutil import utc_now
 
 
 class Like(Base):
@@ -31,7 +32,8 @@ class Like(Base):
     # ID of the user who liked.
     account_id: Mapped[int] = mapped_column(Integer, nullable=False)
     # Like time. List queries ordered descending by this field.
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    # utc_now, not func.now(): see app/utils/timeutil.py for the time convention.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     # Compound unique: same user cannot like the same video twice.
     __table_args__ = (UniqueConstraint("video_id", "account_id"),)

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useNotificationStore } from '../stores/notifications'
 import { useSocialStore } from '../stores/social'
 import AppIcon from './AppIcon.vue'
 import Toaster from './Toaster.vue'
@@ -11,6 +12,7 @@ const props = defineProps<{ full?: boolean }>()
 
 const auth = useAuthStore()
 const social = useSocialStore()
+const notifications = useNotificationStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -31,16 +33,31 @@ const userLabel = computed(() => {
   return auth.claims?.username ?? '我'
 })
 
-const tabs = computed(() => {
-  const base = [
-    { to: '/', label: '推荐', icon: 'home' as const },
-    { to: '/hot', label: '热榜', icon: 'fire' as const },
-    { to: '/video', label: '发布', icon: 'plus' as const },
-    { to: '/messages', label: '私信', icon: 'chat' as const, auth: true },
-    { to: '/account', label: '我的', icon: 'user' as const },
+type Tab = {
+  to: string
+  label: string
+  icon: 'home' | 'fire' | 'plus' | 'chat' | 'bell' | 'user'
+  auth?: boolean
+  badge?: number
+}
+
+const tabs = computed<Tab[]>(() => {
+  const base: Tab[] = [
+    { to: '/', label: '推荐', icon: 'home' },
+    { to: '/hot', label: '热榜', icon: 'fire' },
+    { to: '/video', label: '发布', icon: 'plus' },
+    { to: '/messages', label: '私信', icon: 'chat', auth: true },
+    { to: '/notifications', label: '通知', icon: 'bell', auth: true, badge: notifications.unread },
+    { to: '/account', label: '我的', icon: 'user' },
   ]
   return base.filter(t => !t.auth || auth.isLoggedIn)
 })
+
+/** Cap the badge so a large backlog can't stretch the pill. */
+function badgeText(count: number | undefined) {
+  if (!count) return ''
+  return count > 99 ? '99+' : String(count)
+}
 
 function isTabActive(to: string) {
   if (to === '/') return route.path === '/' || route.path.startsWith('/feed')
@@ -70,6 +87,7 @@ function isTabActive(to: string) {
         >
           <AppIcon :name="t.icon" :size="20" class="side-icon" />
           <span>{{ t.label }}</span>
+          <span v-if="t.badge" class="nav-badge">{{ badgeText(t.badge) }}</span>
         </RouterLink>
       </nav>
 
@@ -106,6 +124,7 @@ function isTabActive(to: string) {
       >
         <AppIcon :name="t.icon" :size="22" class="tab-icon" />
         <span class="tab-label">{{ t.label }}</span>
+        <span v-if="t.badge" class="nav-badge">{{ badgeText(t.badge) }}</span>
       </RouterLink>
     </nav>
 
@@ -245,6 +264,17 @@ function isTabActive(to: string) {
 .tab-item.active::before { width: 28px; }
 .tab-icon { opacity: 0.55; transition: opacity 180ms var(--ease-out); }
 .tab-item.active .tab-icon { opacity: 1; }
+
+/* ═══ Unread badge ═══ */
+.nav-badge {
+  position: absolute; top: 7px; right: 12px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: var(--r-full);
+  background: var(--pink); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+  pointer-events: none;
+}
+.tab-item .nav-badge { top: 5px; right: calc(50% - 20px); }
 
 /* ═══ Responsive ═══ */
 @media (max-width: 768px) {

@@ -15,10 +15,11 @@ Two single-column indexes (from_id, to_id) serve respectively:
 """
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Text, Boolean, DateTime, func
+from sqlalchemy import String, Integer, Text, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.timeutil import utc_now
 
 
 class Message(Base):
@@ -34,4 +35,5 @@ class Message(Base):
     # Whether read. Reserved field, not used in current version.
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     # Send time.
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    # utc_now, not func.now(): see app/utils/timeutil.py for the time convention.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)

@@ -21,6 +21,7 @@ from app.schemas.feed import (
     ListByPopularityRequest, ListByPopularityResponse,
     ListByFollowingRequest, ListByFollowingResponse,
     ListByTagRequest,
+    SearchVideosRequest, SearchVideosResponse,
 )
 from app.services.feed_service import FeedService
 
@@ -112,3 +113,19 @@ async def list_by_tag(
     """Browse videos by #tag."""
     items = await service.list_by_tag(req.tag_name, req.limit, _viewer_id(user))
     return {"video_list": items}
+
+
+@public_router.post("/search", response_model=SearchVideosResponse)
+async def search_videos(
+    req: SearchVideosRequest,
+    user: dict | None = Depends(get_optional_user),
+    service: FeedService = Depends(_get_feed_service),
+):
+    """
+    Keyword search over video title, description and #tag name.
+
+    Soft auth like the other public feed endpoints: anonymous callers get
+    is_liked=false, logged-in callers get their real like state.
+    """
+    items = await service.search(req.query, req.limit, _viewer_id(user))
+    return SearchVideosResponse(video_list=items)

@@ -19,6 +19,7 @@ from app.models.social import Social
 from app.models.tag import Tag, VideoTag
 from app.models.message import Message
 from app.models.notification import Notification
+from app.models.agent_v3 import AgentV3Conversation
 
 __all__ = [
     "Account",
@@ -29,4 +30,5 @@ __all__ = [
     "Tag", "VideoTag",
     "Message",
     "Notification",
+    "AgentV3Conversation",
 ]

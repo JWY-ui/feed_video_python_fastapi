@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 #tag extraction utility -- auto-extract tags from video title and description.
 
 Usage:

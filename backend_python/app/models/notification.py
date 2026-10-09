@@ -20,10 +20,11 @@ Push mechanism:
 """
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Boolean, DateTime, func
+from sqlalchemy import String, Integer, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.utils.timeutil import utc_now
 
 
 class Notification(Base):
@@ -44,4 +45,5 @@ class Notification(Base):
     # Whether read. Mark-read endpoint batch-updates this field.
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     # Notification creation time.
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    # utc_now, not func.now(): see app/utils/timeutil.py for the time convention.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)

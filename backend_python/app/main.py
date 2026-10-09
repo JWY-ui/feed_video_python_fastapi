@@ -35,6 +35,7 @@ from app.utils.redis_client import redis_client
 from app.models import (
     Account, Video, OutboxMsg, Like, Comment,
     Social, Tag, VideoTag, Message, Notification,
+    AgentV3Conversation,
 )  # noqa: F401
 
 # Import all routers

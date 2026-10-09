@@ -99,10 +99,18 @@ export function useVideoFeed() {
     if (tab.value === 'following' && following.items.length === 0) await loadFollowing(true)
   }
 
-  async function loadMoreIfNeeded(activeIndex: number) {
-    const items = currentState.value.items
-    if (items.length === 0) return
-    if (activeIndex < items.length - 3) return
+  /**
+   * Load the next page if there is one.
+   *
+   * Takes NO index on purpose. Callers used to pass the length of the SEARCH
+   * FILTERED list and this compared it against the UNFILTERED items.length --
+   * so typing a query that matched only a few rows made the proximity test fail
+   * and pagination stopped entirely (both the scroll trigger and the
+   * "load more" button). Proximity is the caller's business (HomeView already
+   * measures distance from the bottom); this only decides whether more exists.
+   */
+  async function loadMoreIfNeeded() {
+    if (currentState.value.items.length === 0) return
     if (tab.value === 'recommend' && recommend.hasMore) await loadRecommend(false)
     if (tab.value === 'hot' && hot.hasMore) await loadHot(false)
     if (tab.value === 'following' && following.hasMore) await loadFollowing(false)

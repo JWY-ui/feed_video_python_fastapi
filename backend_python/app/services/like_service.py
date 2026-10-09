@@ -16,10 +16,9 @@ Popularity updates:
   Each like +1, unlike -1. GREATEST prevents negative.
   Popularity aggregates likes, comments, follows for hot ranking.
 """
-from datetime import datetime, timezone
-
 from app.repositories.like_repo import LikeRepository
 from app.repositories.video_repo import VideoRepository
+from app.utils.timeutil import utc_now
 
 
 class LikeService:
@@ -28,26 +27,52 @@ class LikeService:
         self.repo = repo
         self.video_repo = video_repo
 
-    async def like(self, video_id: int, account_id: int) -> None:
+    async def like(self, video_id: int, account_id: int,
+                   sender_username: str | None = None) -> None:
         """
         Like a video.
 
         Flow:
-          1. Validate video exists
+          1. Validate video exists (and fetch the owner, needed for the notification)
           2. Try insert into likes (anti-duplicate -- reject if already liked)
           3. UPDATE videos: likes_count + 1, popularity + 1
+          4. Notify the video's author
+
+        `sender_username` is optional: callers that already have it (the HTTP
+        route, from the JWT) pass it to avoid a lookup; others fall back to one.
         """
-        if not await self.video_repo.is_exist(video_id):
+        video = await self.video_repo.get_by_id(video_id)
+        if video is None:
             raise ValueError("video not found")
 
         created = await self.repo.create_ignore_duplicate(
-            video_id=video_id, account_id=account_id, created_at=datetime.now(timezone.utc),
+            video_id=video_id, account_id=account_id, created_at=utc_now(),
         )
         if not created:
             raise ValueError("already liked")
 
         await self.video_repo.change_likes_count(video_id, 1)
         await self.video_repo.change_popularity(video_id, 1)
+        # Only reached on a NEW like, so re-liking never re-notifies.
+        await self._notify_like(video, account_id, sender_username)
+
+    async def _notify_like(self, video: dict, account_id: int,
+                           sender_username: str | None) -> None:
+        """Tell the video's author. Self-likes are dropped inside notify()."""
+        from app.repositories.account_repo import AccountRepository
+        from app.repositories.notification_repo import NotificationRepository
+        from app.services.notification_service import NotificationService
+
+        username = sender_username
+        if not username:
+            account = await AccountRepository(self.repo.db).find_by_id(account_id)
+            username = account["username"] if account else "有人"
+
+        service = NotificationService(NotificationRepository(self.repo.db))
+        await service.notify(
+            recipient_id=video["author_id"], sender_id=account_id, type="like",
+            target_id=video["id"], content=f"{username} 赞了你的视频",
+        )
 
     async def unlike(self, video_id: int, account_id: int) -> None:
         """

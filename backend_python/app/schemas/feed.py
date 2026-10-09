@@ -112,3 +112,20 @@ class ListByTagRequest(BaseModel):
     """Tag feed request -- no pagination, single load."""
     tag_name: str = Field(..., min_length=1)
     limit: int = Field(default=10, gt=0, le=50)
+
+
+# ==================== 6. Keyword search ====================
+
+class SearchVideosRequest(BaseModel):
+    """
+    Keyword search across title / description / tag name.
+
+    No cursor: LIKE-based search has no stable ordering to page through, so this
+    returns the newest `limit` matches in one shot.
+    """
+    query: str = Field(..., min_length=1, max_length=100)
+    limit: int = Field(default=10, gt=0, le=50)
+
+
+class SearchVideosResponse(BaseModel):
+    video_list: list[FeedVideoItem]

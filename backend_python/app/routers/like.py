@@ -22,7 +22,8 @@ async def like(req: LikeRequest,
                current_user: dict = Depends(get_current_user),
                service: LikeService = Depends(_get_like_service)):
     try:
-        await service.like(req.video_id, current_user["account_id"])
+        await service.like(req.video_id, current_user["account_id"],
+                           current_user["username"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"message": "like success"}
