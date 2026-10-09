@@ -19,7 +19,9 @@ _service: AgentV3Service | None = None
 
 
 def is_configured() -> bool:
-    return bool(settings.openai_api_key)
+    # .strip()：`.env` 里留个空格很常见，那不该算配好了 —— 否则会在构造 OpenAI
+    # 客户端时抛 "Missing credentials"，报错看不懂。
+    return bool(settings.openai_api_key.strip())
 
 
 def db_uri() -> str:

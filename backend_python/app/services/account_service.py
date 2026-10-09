@@ -110,6 +110,17 @@ class AccountService:
             raise ValueError("account not found")
         return user
 
+    async def search(self, query: str, limit: int = 10) -> list[dict]:
+        """Fuzzy user search -- returns candidates instead of raising.
+
+        A blank query returns nothing on purpose: otherwise `LIKE '%%'` would dump
+        the whole account table.
+        """
+        cleaned = (query or "").strip()
+        if not cleaned:
+            return []
+        return await self.repo.search(cleaned, limit)
+
     # ---- Rename ----
     async def rename(self, account_id: int, new_username: str) -> str:
         if not new_username or not new_username.strip():

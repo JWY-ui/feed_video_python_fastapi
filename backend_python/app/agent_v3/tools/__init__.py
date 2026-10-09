@@ -12,7 +12,13 @@ from app.agent_v3.tools.registry import (  # noqa: F401
     register,
     specs_for_llm,
 )
-from app.agent_v3.tools import content, feed, message  # noqa: F401  (side-effect: register)
+from app.agent_v3.tools import (  # noqa: F401  (side-effect: register)
+    account,
+    content,
+    feed,
+    message,
+    social,
+)
 
 __all__ = [
     "REGISTRY",

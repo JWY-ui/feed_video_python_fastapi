@@ -57,6 +57,16 @@ def _prepare_test_database():
     asyncio.run(_create_database_and_tables())
 
 
+@pytest.fixture
+async def data():
+    """造测试数据的工具，前后各清一次库。放在这里，各层测试都能用。"""
+    from factories import Maker, wipe
+
+    await wipe()
+    yield Maker()
+    await wipe()
+
+
 @pytest.fixture(autouse=True)
 async def _dispose_engine_between_tests():
     """每个测试结束后释放连接池。

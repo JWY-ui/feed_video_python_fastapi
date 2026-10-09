@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
 from app.utils.redis_client import redis_client
+from app.utils.sql import escape_like
 
 CACHE_TTL = 86400
 REVOKED_TTL = 60
@@ -63,6 +64,23 @@ class AccountRepository:
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         return _to_dict(row) if row else None
+
+    async def search(self, query: str, limit: int = 10) -> list[dict]:
+        """Fuzzy username search -- returns candidates, never raises.
+
+        Exact matches sort first: the model asked for "小明" and will usually take
+        the first candidate, so "小明" must outrank "小明123". The LIKE wildcards
+        in `query` are escaped -- searching "%" must not match every account.
+        """
+        pattern = f"%{escape_like(query)}%"
+        stmt = (
+            select(Account)
+            .where(Account.username.like(pattern))
+            .order_by((Account.username == query).desc(), Account.id.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return [_to_dict(row) for row in result.scalars().all()]
 
     # ---- Token cache ----
 

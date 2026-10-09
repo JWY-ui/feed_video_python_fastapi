@@ -20,8 +20,12 @@ from app.services.message_service import MessageService
 
 
 class SendMessageArgs(BaseModel):
-    to_id: int = Field(..., description="收件人的账号 ID")
+    to_id: int = Field(..., description="收件人的账号 ID（先 search_user 拿到）")
     content: str = Field(..., min_length=1, max_length=500, description="私信内容")
+
+
+class ListMessagesArgs(BaseModel):
+    peer_id: int = Field(..., description="对方的账号 ID")
 
 
 async def _send_message(ctx: ToolContext, args: SendMessageArgs) -> ToolResult:
@@ -30,7 +34,7 @@ async def _send_message(ctx: ToolContext, args: SendMessageArgs) -> ToolResult:
         try:
             await svc.send(ctx.account_id, args.to_id, args.content)
         except ValueError as e:
-            return ToolResult(summary=f"发送失败：{e}")
+            return ToolResult(summary=f"发送失败：{e}", data=None)
         await session.commit()
 
     # ui 由服务端构造，模型无法产出 —— 否则提示注入就能操纵界面跳转。
@@ -44,6 +48,22 @@ async def _send_message(ctx: ToolContext, args: SendMessageArgs) -> ToolResult:
     )
 
 
+async def _list_messages(ctx: ToolContext, args: ListMessagesArgs) -> ToolResult:
+    async with AsyncSessionLocal() as session:
+        svc = MessageService(MessageRepository(session))
+        messages = await svc.list(ctx.account_id, args.peer_id)
+    return ToolResult(
+        summary=f"你和对方有 {len(messages)} 条往来私信",
+        data=[
+            {
+                "from_me": m["from_id"] == ctx.account_id,
+                "content": m["content"],
+            }
+            for m in messages
+        ],
+    )
+
+
 register(
     ToolSpec(
         name="send_message",
@@ -51,5 +71,15 @@ register(
         args_model=SendMessageArgs,
         tier=Tier.WRITE_PUBLIC,
         handler=_send_message,
+    )
+)
+
+register(
+    ToolSpec(
+        name="list_messages",
+        description="看用户和某个人的私信往来。用户问「他回过我吗」时用。",
+        args_model=ListMessagesArgs,
+        tier=Tier.READ,
+        handler=_list_messages,
     )
 )

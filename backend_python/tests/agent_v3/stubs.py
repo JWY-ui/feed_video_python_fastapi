@@ -75,3 +75,19 @@ def wants(name: str) -> AIMessage:
         tool_calls=[{"name": name, "args": {"n": 1}, "id": f"c_{name}",
                      "type": "tool_call"}],
     )
+
+
+async def call_tool(name: str, *, account_id: int = 1, username: str = "我",
+                    **kwargs):
+    """按注册表调用一个**真实**工具，返回 ToolResult。
+
+    直接走注册表而不是 import 私有函数 —— 顺带证明这个工具确实注册上了、
+    参数模型也吃得下这些参数。
+    """
+    from app.agent_v3.tools import REGISTRY, ToolContext
+
+    spec = REGISTRY[name]
+    return await spec.handler(
+        ToolContext(account_id=account_id, username=username),
+        spec.args_model(**kwargs),
+    )
