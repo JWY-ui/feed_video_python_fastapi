@@ -1,7 +1,13 @@
+# ============================================================
+#  短视频社区 —— 公开仓库的忽略规则
+#
+#  注意：`.gitignore` 只对**未被跟踪**的文件生效。已经在 Git 里的文件
+#  必须用 `git rm --cached` 摘除，否则改了这里也没用。
+# ============================================================
+
 # —— 密钥 ——
-# .env 里是 API key、数据库密码和 JWT secret。这个仓库此前一直没有 .gitignore，
-# 所以任何一次 `git add -A` 都会把它提交进去 —— 一旦推送，即使随后删除，历史里
-# 仍然留着，GitHub 也可能已经缓存。
+# .env 里是 API key、数据库口令和 JWT secret，绝不入库。
+# .env.example 是模板，必须保留 —— 别人靠它知道要配哪些键。
 .env
 .env.*
 !.env.example
@@ -9,6 +15,9 @@
 # —— Python ——
 __pycache__/
 *.py[cod]
+*.egg-info/
+.venv/
+venv/
 
 # —— 测试 / 工具产物 ——
 .pytest_cache/
@@ -18,3 +27,45 @@ replay_pid*.log
 # —— 前端 ——
 node_modules/
 dist/
+
+# —— 运行时上传内容 ——
+# avatars / covers / videos / tmp 由代码用 os.makedirs(exist_ok=True) 自动创建，
+# 但 uploads/ 这个**根目录必须存在**（app/main.py 要把它挂到 StaticFiles），
+# 所以只保留 .gitkeep，上传进去的东西一律不入库。
+backend_python/uploads/*
+!backend_python/uploads/.gitkeep
+
+# —— 本地私有文档（不随仓库公开）——
+# 面试稿、源码导学：属于个人求职材料，只留本地。
+面经-短视频社区.md
+导学-短视频社区.md
+
+# —— 设计工具产物（impeccable）——
+# 产品定位 brief、设计系统规格与 design.json、UI critique 报告。
+# 这一组是同一个工具的输出，一起留在本地。
+PRODUCT.md
+DESIGN.md
+.impeccable/
+
+# —— 个人启动脚本 ——
+# dev.bat 是 GBK(cp936) 编码的 Windows 脚本（改 UTF-8 会让 cmd 解析错乱），
+# 且里面硬编码了本机的 conda 解释器路径，别人拿去跑不了。
+# 读者需要的启动命令写在 README 的「快速开始」里。
+dev.bat
+
+# —— IDE / 编辑器 ——
+.idea/
+.vscode/*
+*.iml
+*.swp
+*~
+# 例外：前端推荐的编辑器插件清单，对贡献者有用，保留。
+!backend_python/frontend/.vscode/extensions.json
+
+# —— 操作系统 ——
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# —— 日志 ——
+*.log

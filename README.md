@@ -9,9 +9,176 @@
 
 ## 目录
 
+- [快速开始](#快速开始)
+- [项目结构](#项目结构)
 - [第一部分 · 站内 AI 助手](#第一部分--站内-ai-助手)
 - [第二部分 · 短视频平台后端](#第二部分--短视频平台后端)
-- [附 · 面试与简历](#附--面试与简历) —— 面试开场介绍 / 可直接摘用的要点 / 常见追问答法
+- [接口一览](#接口一览)
+- [已知缺口](#已知缺口)
+
+---
+
+# 快速开始
+
+## 前置要求
+
+| | 版本 | 是否必需 |
+|---|---|---|
+| Python | 3.10+（Docker 镜像用 3.12） | 必需 |
+| MySQL | 8.0 | 必需 |
+| Redis | 7 | **可选** —— 连不上会自动降级，见下方「后端亮点 ①」 |
+| Node.js | 22+（仅前端需要） | 可选 |
+| Docker + Compose | —— | 仅方式一需要 |
+
+## 方式一：Docker Compose（一条命令起全栈）
+
+```bash
+cd backend_python
+docker compose up -d --build
+```
+
+起四个容器，`depends_on: service_healthy` 保证 MySQL / Redis 就绪后才启动后端：
+
+| 服务 | 地址 | 说明 |
+|---|---|---|
+| 前端（Nginx） | http://localhost | 构建后的 Vue 产物 + `/api` 反代 |
+| 后端 | http://localhost:8080 | 接口与 `/docs` |
+| MySQL | localhost:3307 | 映射到容器内 3306 |
+| Redis | localhost:6378 | 映射到容器内 6379 |
+
+> **注意**：`docker-compose.yml` 没有转发 `OPENAI_API_KEY`，所以容器里的
+> `/agent/*` 会返回 503（助手不配模型就不可用，没有降级模式）。
+> 要用助手，在 compose 的 `backend.environment` 里补上 `OPENAI_API_KEY` 和
+> `LLM_BASE_URL`，或在 `backend` 服务下加 `env_file: .env`。
+
+## 方式二：本地开发
+
+### 1. 后端
+
+```bash
+cd backend_python
+
+# 依赖装进虚拟环境（Windows 用 .venv\Scripts\activate）
+python -m venv .venv && source .venv/bin/activate
+
+# requirements-dev.txt 已经 -r requirements.txt，并带上 pytest
+pip install -r requirements-dev.txt
+
+# 复制配置模板，至少改掉 JWT_SECRET 和 MySQL 口令
+cp .env.example .env
+
+# 启动（--reload 开发用；生产去掉）
+python -m uvicorn app.main:app --reload --port 8080
+```
+
+启动时 `lifespan` 会自动完成：建库（若不存）、`create_all` 建表、
+对齐 LangGraph checkpoint 表的排序规则、连接 Redis（失败不阻塞）、装配助手。
+不用手动跑 migration —— **项目没有用 Alembic**，建表全靠 SQLAlchemy `create_all`。
+
+接口文档：http://localhost:8080/docs （FastAPI 自动生成的 Swagger）。
+健康检查：`GET /healthz`。
+
+### 2. 前端
+
+```bash
+cd backend_python/frontend
+npm install
+npm run dev          # http://localhost:5173
+```
+
+Vite 会把 `/api/...` 代理到 `http://127.0.0.1:8080/...`（见 `vite.config.ts`）。
+前端单独说明见 [`backend_python/frontend/README.md`](backend_python/frontend/README.md)。
+
+### 3. 配置
+
+配置全部走环境变量，读的是 `backend_python/.env.example` 里那些键（环境变量优先于 `.env` 文件）。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SERVER_PORT` | `8080` | 后端监听端口 |
+| `MYSQL_HOST` / `MYSQL_PORT` | `localhost` / `3306` | 本地开发时 MySQL 常映射到 3307 |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | `root` / `123456` | |
+| `MYSQL_DATABASE` | `feedsystem` | 测试用独立的 `feedsystem_test` |
+| `JWT_SECRET` | `change-me-to-a-random-string` | **上线必须改** —— 不改启动时会打警告 |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / `123456` | 连不上只降级、不报错 |
+| `OPENAI_API_KEY` | 空 | **空 = `/agent/*` 全部返回 503** |
+| `LLM_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容端点，可换任意供应方 |
+| `LLM_MODEL` | `deepseek-flash` | |
+| `AGENT_LLM_MAX_RETRIES` / `AGENT_LLM_TIMEOUT` | `2` / `60` | 单次模型调用的重试与超时（秒） |
+| `AGENT_MAX_TOOL_TURNS` | `8` | 单轮最多工具调用次数 |
+| `AGENT_MAX_CONTEXT_TOKENS` | `12000` | 上下文 token 预算 |
+
+### 4. 跑测试
+
+```bash
+cd backend_python
+python -m pytest
+```
+
+95 项测试，**走独立的 `feedsystem_test` 库**，不碰开发库（见 `tests/conftest.py`）。
+需要 MySQL 可连通；Redis 不是必需。
+
+---
+
+# 项目结构
+
+```
+backend_python/
+├── app/
+│   ├── main.py              # FastAPI 入口：lifespan、路由注册、限流装配
+│   ├── config.py            # pydantic-settings 读环境变量
+│   ├── database.py          # async engine / session
+│   ├── dependencies.py      # get_db / get_current_user / get_optional_user
+│   │
+│   ├── routers/             # HTTP 层：只做参数校验与调用 service
+│   ├── services/            # 业务编排：从不 import ORM Model
+│   ├── repositories/        # 数据访问：唯一接触 ORM 的地方，只返回 dict
+│   ├── models/              # SQLAlchemy ORM
+│   ├── schemas/             # 请求 / 响应 DTO
+│   │
+│   ├── middleware/
+│   │   ├── jwt_auth.py      # 认证依赖
+│   │   └── rate_limit.py    # Lua + ZSET 滑动窗口限流
+│   ├── utils/
+│   │   ├── redis_client.py  # 手写封装，"可选依赖"的实现（全项目最大文件，288 行）
+│   │   ├── timeutil.py      # naive-UTC 读写约定收口
+│   │   ├── sql.py           # escape_like 等
+│   │   ├── tag_parser.py    # #标签 / @提及 抽取
+│   │   ├── jwt_helper.py
+│   │   └── password.py      # bcrypt
+│   │
+│   └── agent_v3/            # 站内 AI 助手（第一部分）
+│       ├── graph.py         # LangGraph 图：agent / confirm / tools 三节点
+│       ├── checkpointer.py  # checkpoint 表排序规则对齐
+│       ├── service.py       # 会话编排、SSE 流式
+│       ├── router.py        # 6 个助手接口
+│       ├── context.py       # 上下文裁剪（4KB / token 预算）
+│       ├── deps.py          # 服务装配与生命周期
+│       ├── repo.py          # 会话表数据访问
+│       └── tools/           # 20 个工具，按域分 5 个模块 + registry.py
+│
+├── frontend/                # Vue 3 + TypeScript
+│   └── src/
+│       ├── api/             # 各域 API 客户端 + SSE 客户端
+│       ├── components/      # 含 AgentPanel.vue（悬浮助手）
+│       ├── views/           # 11 个页面
+│       ├── stores/          # Pinia
+│       └── utils/           # 含 time.ts、uiActions.ts
+│
+├── tests/                   # 95 项测试
+│   ├── conftest.py          # 独立测试库 + 每个测试后释放连接池
+│   ├── factories.py         # 造数据
+│   └── agent_v3/            # 助手测试（含桩模型、并发、持久化）
+│
+├── docker-compose.yml       # MySQL + Redis + 后端 + Nginx 前端
+├── Dockerfile
+├── requirements.txt         # 生产依赖
+└── requirements-dev.txt     # + pytest
+```
+
+一条贯穿全项目的强约定：**repository 是唯一 import ORM Model 的地方，且只返回
+`dict` / 原始类型**，上层永远看不到 ORM 对象；service 层从不 import Model。
+详见[后端 · 分层与约定](#分层与约定)。
 
 ---
 
@@ -350,11 +517,110 @@ LIKE 通配符转义抽成 `escape_like`：**先转义反斜杠再转义 `%` / `
 > **已知限制**：进程内队列意味着多 worker 下发布只到同 worker 的连接。当前 Docker
 > 单 worker 所以成立；换 Redis Pub/Sub 时只需替换 `subscribe/publish/unsubscribe` 三个函数。
 
-## 已知缺口（如实列出）
+---
+
+# 接口一览
+
+全部为 `POST`（除标注外），请求/响应体为 JSON。带锁标记的需要 `Authorization: Bearer <access_token>`。
+
+## 账号 `/account`（11）
+
+| 接口 | 说明 | 需登录 |
+|---|---|---|
+| `/register` | 注册（限流 5 次/小时/IP） | |
+| `/login` | 登录（限流 10 次/分钟/IP） | |
+| `/refresh` | 用 access + refresh 换新令牌 | |
+| `/changePassword` | 改密（改完 refresh 失效） | |
+| `/findByID` | 按 ID 查用户 | |
+| `/findByUsername` | 按用户名查用户 | |
+| `/getProfile` | 个人资料 | |
+| `/logout` | 登出 | ✓ |
+| `/rename` | 改名 | ✓ |
+| `/uploadAvatar` | 上传头像（multipart） | ✓ |
+| `/updateProfile` | 更新简介等 | ✓ |
+
+## 视频 `/video`（9）
+
+| 接口 | 说明 | 需登录 |
+|---|---|---|
+| `/listByAuthorID` | 某作者的作品列表 | |
+| `/getDetail` | 视频详情（三层缓存） | |
+| `/publish` | 发布（写 `outbox_msgs` 同事务） | ✓ |
+| `/uploadVideo` | 整文件上传（≤200MB，一次性读入内存） | ✓ |
+| `/uploadCover` | 上传封面 | ✓ |
+| `/chunk/init` | 分片上传：初始化/续传 | ✓ |
+| `/chunk/upload` | 上传单片 | ✓ |
+| `/chunk/status` | 查询已传分片 | ✓ |
+| `/chunk/complete` | 合并分片 | ✓ |
+
+## 点赞 `/like`（4，限流 30 次/分钟）
+
+`/like` · `/unlike` · `/isLiked` · `/listMyLikedVideos` —— 全部需登录。
+
+## 评论 `/comment`（3，写限流 10 次/分钟）
+
+| 接口 | 说明 | 需登录 |
+|---|---|---|
+| `/listAll` | 某视频的评论列表 | |
+| `/publish` | 发评论 | ✓ |
+| `/delete` | 删评论 | ✓ |
+
+## 关注 `/social`（5，限流 20 次/分钟）
+
+`/follow` · `/unfollow` · `/getAllFollowers` · `/getAllVloggers` · `/getCounts` —— 全部需登录。
+
+## Feed `/feed`（6）
+
+| 接口 | 说明 | 需登录 |
+|---|---|---|
+| `/listLatest` | 最新（热冷分离 + 毫秒游标） | 可选 |
+| `/listLikesCount` | 最多赞（`(likes_count, id)` 游标） | 可选 |
+| `/listByPopularity` | 热门（三列复合游标） | 可选 |
+| `/listByTag` | 按标签 | 可选 |
+| `/search` | 搜索视频 | 可选 |
+| `/listByFollowing` | 关注的时间线 | ✓ |
+
+> "需登录：可选"指用 `get_optional_user` —— 未登录也能浏览，登录后响应里会多出
+> `isLiked` / `isFollowed` 这类个性化字段。
+
+## 私信 `/message`（2，需登录）
+
+`/send` · `/list`
+
+## 通知 `/notification`（4）
+
+| 接口 | 说明 | 需登录 |
+|---|---|---|
+| `GET /stream` | **SSE** 实时推送（30s keepalive） | 走 stateless 认证 |
+| `/list` | 通知列表 | ✓ |
+| `/markRead` | 标记已读 | ✓ |
+| `/unreadCount` | 未读数 | ✓ |
+
+## AI 助手 `/agent`（6，需登录）
+
+| 接口 | 说明 |
+|---|---|
+| `/conversations` | 新建会话 |
+| `/conversations/list` | 会话侧栏列表 |
+| `/conversations/delete` | 删除会话 |
+| `/conversations/history` | 拉历史消息 |
+| `/chat` | **SSE** 发起一轮对话（写操作会在此挂起等确认） |
+| `/confirm` | **SSE** 提交"同意 / 拒绝"并恢复图 |
+
+> 未配置 `OPENAI_API_KEY` 时，这 6 个接口全部返回 **503**。
+
+## 其他
+
+`GET /healthz` —— 健康检查，返回 `{"status": "ok"}`。
+`GET /docs` —— Swagger UI（FastAPI 自动生成）。
+
+---
+
+# 已知缺口
 
 写文档时把限制写清楚，比让人踩一遍强：
 
-- **限流在 Redis 不可用时完全失效**（见 ①，实测 20 并发 0 拦截）；
+- **限流在 Redis 不可用时完全失效**（见「后端亮点 ①」，实测 20 并发 0 拦截）；
 - **热门榜的 Redis 分钟窗口快照（`hot:video:1m:*` + `ZUNIONSTORE`）只有读路径、没有写入方**，
   所以实际每次都回退到 MySQL 三重游标 —— 设计在，链路是死的；
 - **`outbox_msgs` 只落地了存储半边**（发布视频时同事务写入），中继消费者未实现；
@@ -362,109 +628,5 @@ LIKE 通配符转义抽成 `escape_like`：**先转义反斜杠再转义 `%` / `
 - **通知实时推送用进程内队列**，多 worker 下只有同 worker 能收到；
 - 整文件上传 `/video/uploadVideo` 是 `await file.read()` **一次性读进内存**（限 200MB）；
 - `/account/getProfile` 的视频数/获赞数统计是**硬编码 0**；
-- 仓库里曾有 112 个 `.pyc` 被 git 跟踪（现已加 `.gitignore`，但仍需 `git rm --cached` 摘除）。
-
----
-
-# 附 · 面试与简历
-
-## 面试开场介绍
-
-### 电梯版（约 15 秒，被问"讲讲你这个项目"时先用它开口）
-
-> 一个短视频社区的全栈项目：Python FastAPI 后端 44 个接口、Vue 3 前端。
-> 我最近在上面做的是**站内 AI 助手** —— 能替用户找视频、发私信，
-> 但**对外可见的写操作必须先弹确认卡**，用户点了才真的发出去。
-
-### 主用版（约 2 分钟）
-
-> 这个项目是一个短视频社区，后端 Python + FastAPI、前端 Vue 3，
-> 44 个业务接口，跑在 MySQL 和 Redis 上。
->
-> 我做得最深的是**站内 AI 助手**这一块 —— 一个悬浮在页面右下角的助手。
-> 用户可以让它找视频、看评论，也可以让它**替自己发私信、发评论**。
-> 这里最核心的约束是一条产品规则：**读操作直接执行，但对外可见的写操作必须先弹确认卡**。
->
-> 我用 LangGraph 实现，靠它的 `interrupt()` 和 `Command(resume=)`，把
-> "挂起 → 等用户拍板 → 恢复"做成了一个**可持久化的状态机**。
-> 状态存在 MySQL 里，所以用户关掉页面再回来、或者"点确认"的那个请求和
-> "发起对话"的请求不是同一个连接，图都能接着往下走。
->
-> 我在上面花时间最多的其实不是功能，是两件事：**验证**和**并发**。
->
-> 验证上：`interrupt`/`resume` 的语义是最容易写错、也最容易被后续改动**静默打破**的
-> 地方，但它依赖大模型，很难稳定复现。我的做法是把模型换成一个桩，
-> 但驱动的是**真实的图加真实的 MySQL checkpointer**，这样就能确定性地断言
-> "写操作挂起时不执行、批准后才执行、拒绝后不执行并且要告知模型"。
->
-> 并发上：我压测时发现，同一个会话上两个"确认"同时到达，**写操作会执行两遍** ——
-> 也就是同一条私信会发出去两条。根因是同一个会话上没有任何串行化，
-> 两个图运行同时读写同一份 checkpoint。后来用**按会话加锁 + 确认接口幂等**修掉了，
-> 实测从 2 次降到 1 次；同根因还藏着两个更隐蔽的问题也一并修了。
->
-> 另外还有一个我印象很深的 bug：第三方 checkpointer 库的 SQL 里有个派生列没写
-> `COLLATE`，跟项目数据库的排序规则冲突，**用户发的第一条消息就会失败**。
-> 这个用内存 checkpointer 测根本测不出来，只有接真实数据库才会暴露。
-
-### 对方想深入时，按这个顺序展开（挑他感兴趣的那条）
-
-1. **为什么用 LangGraph 而不是自己写 ReAct 循环** —— 关键是 `interrupt()` + checkpointer：手写要维护一个可中断、可序列化、能在另一个 HTTP 请求里恢复的状态机。
-2. **三级工具权限怎么划分** —— 按"能否撤销 + 影响面"：点赞/关注有反向操作；发私信/发评论对外可见且撤不回。
-3. **那个 `COLLATE` bug 的完整定位过程** —— 从"桩模型全绿但接真库就炸"到在库源码里找到 `json_table` 派生列。
-4. **并发问题的压测方法** —— 30 路并发 + 真 socket 断开，以及为什么单测覆盖不到。
-5. **后端的设计** —— Feed 热冷分离、Lua 滑动窗口限流、双令牌刷新。
-6. **前端为什么把助手做成悬浮面板** —— 挂在 `RouterView` 之外，跳转时对话才不会被卸载。
-
-> **讲述提醒**：这几条都能追到具体代码和实测数字。如果对方要求"看代码"，
-> 直接翻 `backend_python/app/agent_v3/` —— 模块划分和注释都是按"别人能读懂"写的。
-
-## 可直接摘用的要点
-
-**AI 助手部分**
-
-- 基于 **LangGraph** 实现带 human-in-the-loop 的站内助手：用动态 `interrupt()` /
-  `Command(resume=)` 把"读操作直接执行、**对外可见的写操作必须用户确认**"做成可持久化、
-  可跨请求恢复的状态机；用桩模型（不依赖真模型与网络）驱动真实图与 MySQL checkpointer
-  写成回归测试。
-- 定位并修复**并发下的重复写操作**：同一会话两个"确认"并发到达时写操作执行两次
-  （私信发出两条）。通过按会话串行化 + 确认接口幂等修复，压测验证 2 次 → 1 次；
-  同根因的"并发轮次丢消息""确认卡开着时新消息销毁待确认操作"一并修复。
-- 诊断出一个**仅真实 checkpointer 才暴露的线上级故障**：三方库 SQL 中 `json_table`
-  派生列未指定 `COLLATE`，与项目库排序规则冲突导致首次对话即失败；在启动时幂等对齐
-  checkpoint 表解决。
-- 设计**三级工具权限模型**（read / 可逆写 / 公开写）与 20 个工具；身份由服务端注入
-  （模型无法伪造），UI 指令由服务端构造 + 前端白名单二次校验。
-
-**后端部分**
-
-- 设计并实现短视频社区后端：**FastAPI + SQLAlchemy 2.0 async + MySQL + Redis**，
-  严格 router / service / repository 分层（repository 是唯一接触 ORM 的地方、只返回 dict），
-  44 个接口。
-- 用 **Lua 脚本在 Redis 里实现 ZSET 滑动窗口限流**，一次解决 `INCR + EXPIRE` 竞态
-  与固定窗口边界 2× 突发两个问题。
-- 设计 **access + refresh 双令牌**：access 为 15 分钟无状态 JWT，refresh 为可吊销的
-  随机串存库；刷新时"**验签但跳过 exp**"取出 account_id 再按主键比对，把全表扫描
-  优化成 O(1) 查询。
-- 为视频详情设计**三层缓存防护**：随机 TTL 防雪崩、`SETNX` 互斥锁防击穿、
-  空值哨兵防穿透。
-- 实现 **Feed 热冷分离**：以 Redis ZSET 最旧 score 作 watermark 决定走内存还是 MySQL，
-  热区不足自动拼冷数据；ZSET 重建用 `asyncio.Lock` 单飞防惊群。
-- 列表分页全部使用**复合游标**（如 `(likes_count, id)`）而非 OFFSET，
-  并以 id 作 tiebreaker 避免翻页边界重复/漏项。
-- 排查并修复**时间线整体偏 8 小时且翻页重复**的时区问题，收口为统一的 naive-UTC
-  读写约定。
-- 把 Redis 设计为**可选依赖**：连接失败不抛异常，每个方法返回语义化的安全默认值，
-  业务层零 `if` 分支；本地开发不起 Redis 也能跑通全链路。
-
-## 可能被追问的点（想清楚再写）
-
-| 追问 | 怎么答 |
-|---|---|
-| 为什么用 LangGraph 而不是自己写 ReAct 循环？ | 核心是 `interrupt()`/checkpointer：手写要维护一个可中断、可序列化、能在**另一个 HTTP 请求里**恢复的状态机，这正是 checkpointer 做完的事 |
-| 为什么要确认机制？模型直接发私信不行吗？ | 安全与产品两条理由：写操作不可撤回，且"LLM 自主发私信"不可接受；确认机制天然是一个检查点 |
-| 工具权限分三级怎么定的？ | 按"能否撤销 + 影响面"：点赞/关注有反向操作；发私信/发评论对外可见且撤不回 |
-| 并发问题为什么之前没发现？ | 单测覆盖不到：需要同一个会话上两个请求真并发。是压测（30 路并发 + 真 socket 断开）才暴露的 |
-| 怎么证明修好了？ | 先写失败的测试（修复前实测执行 2 次），再修，测试转绿并留在回归套件里 |
-| 分页为什么不用 OFFSET？ | 深分页要扫描并丢弃前 N 行；且翻页期间有新增/删除会导致重复或漏项。复合游标 + id tiebreaker 两者都解决 |
-| 为什么 refresh token 不做成 JWT？ | JWT 无法吊销。做成随机串存库后，登出/改密即可立即失效；代价是刷新要查一次库，所以用"验签跳过 exp"把这次查询压成主键查询 |
-| 限流为什么要用 Lua？ | "清理→计数→判断→记录"四步必须原子，否则两个并发请求会各自读到旧计数、双双放行 |
+- **没有数据库迁移工具**：建表全靠 SQLAlchemy `create_all`，它只建不改 —— 已有表的结构
+  变更不会被应用，Model 字段改了需要手动 `ALTER` 或重建表。生产环境应换成 Alembic。
