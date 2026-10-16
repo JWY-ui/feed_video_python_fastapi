@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from app.agent_v3.graph import build_graph
-from stubs import EXECUTED, StubChatModel, wants
+from stubs import EXECUTED, StubChatModel, unanswered_tool_calls, wants, wants_all
 
 CONFIG = {"configurable": {"thread_id": "test-thread"}}
 START_STATE = {
@@ -73,3 +73,19 @@ async def test_rejecting_skips_the_write_and_tells_the_model(stub_tools):
     assert any("取消" in (getattr(m, "content", "") or "")
                for m in state["messages"]), "要让模型知道用户拒绝了"
     assert state["messages"][-1].content == "那算了"
+
+
+async def test_rejecting_a_mixed_batch_still_answers_every_tool_call(stub_tools):
+    """一轮里同时有只读和公开写时，拒绝也必须让**每个** tool_call 都有应答。
+
+    这条只读调用会被一起拦下来跟用户确认（整批走 confirm），拒绝后整批取消 ——
+    但「取消」不等于「可以不管它」。少回一条 ToolMessage，checkpoint 里就留下一条
+    永远无人应答的 tool_call，此后这个会话每一轮调模型都 400。
+    """
+    graph = _build([wants_all("t_read", "t_write"), AIMessage(content="那算了")])
+    await graph.ainvoke(START_STATE, CONFIG)
+
+    state = await graph.ainvoke(Command(resume={"approved": False}), CONFIG)
+
+    assert EXECUTED == [], "拒绝后整批取消，只读的也不该偷偷执行"
+    assert unanswered_tool_calls(state["messages"]) == [], "每个 tool_call 都必须有应答"

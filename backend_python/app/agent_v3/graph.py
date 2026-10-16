@@ -203,7 +203,8 @@ def build_graph(*, llm, checkpointer):
         return {"messages": messages, "ui_actions": ui_actions, "usage": usage}
 
     async def ask_user(state: AgentState) -> dict:
-        pending = [c for c in _pending_calls(state) if _is_public_write(c["name"])]
+        calls = _pending_calls(state)
+        pending = [c for c in calls if _is_public_write(c["name"])]
 
         # 动态中断：第一次执行到这里挂起，用户点了确认后 resume 值作为返回值。
         # 注意此节点会被从头重跑，所以上面只能做无副作用的准备。
@@ -224,17 +225,27 @@ def build_graph(*, llm, checkpointer):
         if decision and decision.get("approved"):
             return {}
 
-        # 被拒绝：为每个待确认的调用回一条 ToolMessage，让模型知道发生了什么。
+        # 被拒绝：**整批**都要应答，不只是那几个写操作。同批里的只读调用被一起拦下来
+        # 等确认，所以它同样欠着一条 ToolMessage —— 协议要求每个 tool_call 一一对应，
+        # 漏掉的那条无人应答的消息会永远留在 checkpoint 里，此后每一轮调模型都 400。
+        # 整批都不执行；只读的让模型下一轮重新发起即可。
         return {
             "messages": [
                 ToolMessage(
                     content=json.dumps(
-                        {"cancelled": True, "reason": "用户取消了该操作"},
+                        {
+                            "cancelled": True,
+                            "reason": (
+                                "用户取消了该操作"
+                                if _is_public_write(c["name"])
+                                else "该调用随本轮一起被取消，未执行"
+                            ),
+                        },
                         ensure_ascii=False,
                     ),
                     tool_call_id=c["id"],
                 )
-                for c in pending
+                for c in calls
             ]
         }
 

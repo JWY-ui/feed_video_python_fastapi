@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel
 
 from app.agent_v3.tools import REGISTRY, Tier, ToolResult, ToolSpec, register
@@ -75,6 +75,38 @@ def wants(name: str) -> AIMessage:
         tool_calls=[{"name": name, "args": {"n": 1}, "id": f"c_{name}",
                      "type": "tool_call"}],
     )
+
+
+def wants_all(*names: str) -> AIMessage:
+    """构造一条"模型想在一轮里同时调这几个工具"的消息。
+
+    真模型很爱这么干（系统提示还鼓励它直接调工具），所以「一轮里既有只读又有
+    公开写」是常态，不是边缘情况。
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {"name": name, "args": {"n": 1}, "id": f"c_{name}", "type": "tool_call"}
+            for name in names
+        ],
+    )
+
+
+def unanswered_tool_calls(messages) -> list[str]:
+    """没有 ToolMessage 应答的 tool_call id。
+
+    OpenAI 协议要求 assistant.tool_calls 里的**每一个** id 都有应答。少一条，
+    下一次调模型就是 400；而那条坏消息已经进了 checkpoint，删不掉 —— 这个会话
+    从此刻起每一轮都失败。
+    """
+    answered = {m.tool_call_id for m in messages if isinstance(m, ToolMessage)}
+    return [
+        call["id"]
+        for message in messages
+        if isinstance(message, AIMessage)
+        for call in (getattr(message, "tool_calls", None) or [])
+        if call["id"] not in answered
+    ]
 
 
 async def call_tool(name: str, *, account_id: int = 1, username: str = "我",
