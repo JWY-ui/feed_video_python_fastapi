@@ -33,6 +33,34 @@ def test_specs_for_llm_is_openai_shaped():
         assert entry["function"]["parameters"]["type"] == "object"
 
 
+def test_every_public_write_tool_writes_its_own_confirmation_card():
+    """对外可见的写操作都要自带确认卡文案。
+
+    确认卡是用户决定「发不发」的唯一依据，文案必须说清要发什么。兜底那版会把整个
+    参数 JSON 塞进去 —— 既不友好，新增工具时也最容易漏配。这条和
+    test_the_confirm_set_is_exactly_what_we_decided 是一对：新加一个 write_public
+    工具，tier 和文案两处都得有人显式决定。
+    """
+    for name in MUST_CONFIRM:
+        assert REGISTRY[name].preview is not None, f"{name} 没配确认卡文案"
+
+
+def test_the_confirmation_card_shows_what_would_actually_be_sent():
+    """文案里得看得见收件人和正文 —— 「将执行 send_message」等于没问。"""
+    card = REGISTRY["send_message"].describe({"to_id": 42, "content": "今晚看球？"})
+
+    assert "42" in card
+    assert "今晚看球？" in card
+
+
+def test_tools_without_their_own_card_fall_back_to_a_generic_one():
+    """没配文案的工具（全是只读的，走不到确认）要有兜底，且兜底看得出是哪个工具。"""
+    spec = REGISTRY["search_videos"]
+
+    assert spec.preview is None
+    assert "search_videos" in spec.describe({"query": "做菜"})
+
+
 def test_expected_read_only_tools_are_registered():
     """计划里点名的只读工具都得在 —— 少一个模型就会以为自己没有这个能力。"""
     expected = {

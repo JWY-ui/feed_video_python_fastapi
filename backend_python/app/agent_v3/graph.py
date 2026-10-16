@@ -49,6 +49,9 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     ui_actions: Annotated[list[dict], operator.add]
     usage: Annotated[list[dict], operator.add]
+    # 已经跑过几轮工具。模型可以一直调下去，每轮都在烧 token —— 这个计数就是
+    # 用来在 agent_max_tool_turns 处喊停的。
+    tool_turns: Annotated[int, operator.add]
 
 
 def _pending_calls(state: AgentState) -> list[dict]:
@@ -94,13 +97,13 @@ def _emit(payload: dict) -> None:
 
 
 def _preview(call: dict) -> str:
-    """给确认卡看的一句话。"""
-    args = call.get("args") or {}
-    if call["name"] == "send_message":
-        return f"将给用户 {args.get('to_id')} 发送私信：{args.get('content')}"
-    if call["name"] == "publish_comment":
-        return f"将在视频 {args.get('video_id')} 下发表评论：{args.get('content')}"
-    return f"将执行 {call['name']}（参数 {json.dumps(args, ensure_ascii=False)}）"
+    """给确认卡看的一句话。
+
+    文案跟着**工具**走，不在这里按工具名硬编码 —— 新增一个对外可见的写操作时，
+    确认卡由那个工具自己负责说清楚要发什么（见 ToolSpec.preview）。
+    """
+    spec = get_spec(call["name"])
+    return spec.describe(call.get("args") or {})
 
 
 def build_graph(*, llm, checkpointer):
@@ -112,6 +115,20 @@ def build_graph(*, llm, checkpointer):
     bound = llm.bind_tools(specs_for_llm())
 
     async def call_model(state: AgentState) -> dict:
+        # 上限到了就不再问模型，直接给用户一句解释收尾。不问模型而不是让它「总结
+        # 一下」：模型正是停不下来的那一方，把决定权交回给它等于没设上限。
+        if state.get("tool_turns", 0) >= settings.agent_max_tool_turns:
+            return {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            f"这一轮的工具调用到上限（{settings.agent_max_tool_turns} 次）"
+                            "了，我先停下。把问题拆小一点再问我，或者换个说法试试。"
+                        )
+                    )
+                ]
+            }
+
         system = SystemMessage(
             content=SYSTEM_PROMPT.format(
                 username=state.get("username", ""),
@@ -200,7 +217,12 @@ def build_graph(*, llm, checkpointer):
                 )
             )
 
-        return {"messages": messages, "ui_actions": ui_actions, "usage": usage}
+        return {
+            "messages": messages,
+            "ui_actions": ui_actions,
+            "usage": usage,
+            "tool_turns": 1,
+        }
 
     async def ask_user(state: AgentState) -> dict:
         calls = _pending_calls(state)

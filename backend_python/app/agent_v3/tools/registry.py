@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import enum
+import json
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
@@ -50,6 +51,8 @@ class ToolResult:
 
 
 Handler = Callable[[ToolContext, Any], Awaitable[ToolResult]]
+# 确认卡上的一句话：入参是模型给的原始参数
+Preview = Callable[[dict], str]
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,18 @@ class ToolSpec:
     args_model: type[BaseModel]
     tier: Tier
     handler: Handler
+    # 确认卡文案。**对外可见的写操作必须自己配** —— 用户就是看着这句话决定发不发的
+    # （见 test_tools_registry 里那条不变量）。其余工具可以留空走兜底。
+    preview: Preview | None = None
+
+    def describe(self, args: dict) -> str:
+        """给确认卡的一句话。"""
+        if self.preview is not None:
+            return self.preview(args)
+        return (
+            f"将执行 {self.name}"
+            f"（参数 {json.dumps(args, ensure_ascii=False, default=str)}）"
+        )
 
     def openai_schema(self) -> dict:
         """转成 OpenAI 兼容的 tools 声明（DeepSeek 走同一协议）。"""

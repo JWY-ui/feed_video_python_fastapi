@@ -28,6 +28,11 @@ class ListMessagesArgs(BaseModel):
     peer_id: int = Field(..., description="对方的账号 ID")
 
 
+def _preview(args: dict) -> str:
+    """确认卡文案。收件人和正文都要看得见 —— 否则等于没问用户。"""
+    return f"将给用户 {args.get('to_id')} 发送私信：{args.get('content')}"
+
+
 async def _send_message(ctx: ToolContext, args: SendMessageArgs) -> ToolResult:
     async with AsyncSessionLocal() as session:
         svc = MessageService(MessageRepository(session))
@@ -71,6 +76,7 @@ register(
         args_model=SendMessageArgs,
         tier=Tier.WRITE_PUBLIC,
         handler=_send_message,
+        preview=_preview,
     )
 )
 

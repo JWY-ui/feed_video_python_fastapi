@@ -35,6 +35,11 @@ class NoArgs(BaseModel):
     """无参数工具用。"""
 
 
+def _preview(args: dict) -> str:
+    """确认卡文案。评论是公开发出去的，正文必须摆在用户眼前。"""
+    return f"将在视频 {args.get('video_id')} 下发表评论：{args.get('content')}"
+
+
 async def _like_video(ctx: ToolContext, args: VideoIdArgs) -> ToolResult:
     async with AsyncSessionLocal() as session:
         svc = LikeService(LikeRepository(session), VideoRepository(session))
@@ -158,5 +163,6 @@ register(
         args_model=PublishCommentArgs,
         tier=Tier.WRITE_PUBLIC,
         handler=_publish_comment,
+        preview=_preview,
     )
 )
