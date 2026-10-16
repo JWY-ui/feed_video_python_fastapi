@@ -32,6 +32,32 @@ TIMELINE_MAX_SIZE = 1000
 _rebuild_lock = asyncio.Lock()
 
 
+def _ordered_by_ids(videos: list[dict], ids: list[int]) -> list[dict]:
+    """按 ids 的顺序排列，并丢掉查不到的。
+
+    ZSET 给的是「最新优先」的 id 序，而 `get_by_ids` 是一条 `IN` 查询、不保证顺序
+    （实测按主键返回，整页会倒过来）。顺序错了不只影响显示：下面补冷数据的游标取自
+    `hot_videos[-1]`，那本该是本页**最旧**的一条。
+
+    查不到的 id 直接丢掉 —— 视频删除后时间线里的残留条目不会自己消失。
+    """
+    by_id = {v["id"]: v for v in videos}
+    return [by_id[vid] for vid in ids if vid in by_id]
+
+
+def _stitch_cursor(hot_videos: list[dict],
+                   latest_time_ms: int) -> datetime | None:
+    """补冷数据时从哪一条往前取。None = 从头（最新）开始。
+
+    热数据一条都没查到（时间线里全是悬空 id）时，这一页其实就是首页，必须从最新
+    开始取。老实现这里用了 `utc_from_epoch(0)` = 1970，而 repo 的语义是「取该时间
+    **之前**的」，于是整页空白。
+    """
+    if hot_videos:
+        return hot_videos[-1]["create_time"]
+    return utc_from_epoch(latest_time_ms / 1000) if latest_time_ms > 0 else None
+
+
 class FeedService:
 
     def __init__(self, repo: FeedRepository, like_repo: LikeRepository):
@@ -79,13 +105,16 @@ class FeedService:
 
         video_ids = [int(s) for s in video_ids_str]
 
-        # 5. Batch-fetch full video data
-        hot_videos = await self.repo.get_by_ids(video_ids) if video_ids else []
+        # 5. Batch-fetch full video data, 并还原 ZSET 的顺序
+        hot_videos = _ordered_by_ids(
+            await self.repo.get_by_ids(video_ids), video_ids
+        ) if video_ids else []
 
         # 6. Hot data insufficient -> stitch with cold data
         if len(hot_videos) < limit:
-            cold_cursor = hot_videos[-1]["create_time"] if hot_videos else utc_from_epoch(latest_time_ms / 1000)
-            cold_videos = await self.repo.list_latest(limit - len(hot_videos), cold_cursor)
+            cold_videos = await self.repo.list_latest(
+                limit - len(hot_videos), _stitch_cursor(hot_videos, latest_time_ms)
+            )
             hot_videos.extend(cold_videos)
 
         items = await self._build_items(hot_videos, viewer_id)
