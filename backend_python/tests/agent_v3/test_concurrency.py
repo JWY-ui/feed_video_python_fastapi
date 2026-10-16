@@ -16,8 +16,14 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from app.agent_v3.graph import build_graph
+from app.agent_v3.lock import thread_lock
 from app.agent_v3.service import AgentV3Service
+from app.config import settings
 from stubs import EXECUTED, StubChatModel, wants
+
+# 本文件的测试都要 Redis：会话锁在 Redis 里（app/agent_v3/lock.py），限流也是。
+pytestmark = pytest.mark.usefixtures("redis_client")
+
 
 ACCOUNT = 960002
 USERNAME = "我"
@@ -132,6 +138,36 @@ async def test_abandoning_a_stream_does_not_wedge_the_thread(
         _drain(service.chat_stream(ACCOUNT, USERNAME, "乙", thread)), timeout=10
     )
     assert any(e["event"] == "done" for e in later), "断开一次之后这个会话就废了"
+
+
+async def test_a_turn_is_refused_when_the_lock_backend_is_down(
+    checkpointer, stub_tools, thread, redis_client, monkeypatch
+):
+    """Redis 挂掉时这个会话必须拒绝服务，而不是「无锁照跑」。
+
+    无锁照跑会退回那条会静默损坏数据的路径（消息丢失 / 主键冲突 / 写操作跑两遍）。
+    """
+    monkeypatch.setattr(redis_client, "_available", False)
+    service = _service([AIMessage(content="好")], checkpointer)
+
+    events = await _drain(service.chat_stream(ACCOUNT, USERNAME, "在吗", thread))
+
+    assert any(e["event"] == "error" for e in events), "锁不可用必须报错"
+    assert not any(e["event"] == "done" for e in events), "不该当成功跑完"
+
+
+async def test_a_turn_reports_a_clear_error_when_the_thread_is_busy(
+    checkpointer, stub_tools, thread, monkeypatch
+):
+    """等锁超时要给一条说明白的话，不能把请求无声挂死。"""
+    monkeypatch.setattr(settings, "agent_lock_wait_seconds", 1)
+    service = _service([AIMessage(content="好")], checkpointer)
+
+    async with thread_lock(thread):  # 模拟另一个运行正占着这个会话
+        events = await _drain(service.chat_stream(ACCOUNT, USERNAME, "在吗", thread))
+
+    assert any(e["event"] == "error" for e in events), "等不到锁必须报错"
+    assert not any(e["event"] == "done" for e in events)
 
 
 async def test_concurrent_turns_do_not_corrupt_the_checkpoint(

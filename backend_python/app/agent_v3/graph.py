@@ -214,6 +214,8 @@ def build_graph(*, llm, checkpointer):
                 ToolMessage(
                     content=render_tool_result(payload),
                     tool_call_id=call["id"],
+                    # 带上工具名：前端回放历史时才知道这坨 JSON 是哪个工具的结果
+                    name=spec.name,
                 )
             )
 

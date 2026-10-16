@@ -55,6 +55,7 @@ from app.agent_v3 import deps as agent_deps
 from app.agent_v3.checkpointer import ensure_checkpoint_collation
 from app.agent_v3.graph import build_graph
 from app.agent_v3.router import router as agent_router
+from app.agent_v3.router import stream_router as agent_stream_router
 from app.agent_v3.service import AgentV3Service
 
 # Rate limiting config
@@ -234,7 +235,12 @@ app.include_router(message_router, prefix="/message", tags=["7. Message"])
 app.include_router(notification_router, prefix="/notification", tags=["8. Notification"])
 
 # Agent: 6 endpoints (conversations / history / chat SSE / confirm SSE)
+# Split in two: the cheap conversation endpoints carry no extra dependencies, while
+# /chat and /confirm need the per-thread lock (Redis) and a rate limit -- they are the
+# two most expensive endpoints in the app. Both limiters live in app/agent_v3/deps.py
+# rather than here, since only half this module's routes want them.
 app.include_router(agent_router, prefix="/agent", tags=["9. Agent"])
+app.include_router(agent_stream_router, prefix="/agent", tags=["9. Agent"])
 
 
 @app.get("/healthz")

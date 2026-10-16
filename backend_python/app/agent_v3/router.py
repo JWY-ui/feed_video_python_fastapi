@@ -1,6 +1,13 @@
 """/agent/* 端点。
 
-/chat 与 /confirm 是 SSE，都用 `get_current_user_stateless`：普通认证依赖
+分两个路由器，因为两类端点的依赖完全不同：
+
+* `router` —— 会话管理（列表 / 历史 / 删除）。纯 DB 查询，廉价，不限流、
+  不要求 Redis。
+* `stream_router` —— 对话（/chat、/confirm）。SSE，要会话锁、要限流，是全站
+  最贵的两个端点。
+
+/chat 与 /confirm 都用 `get_current_user_stateless`：普通认证依赖
 （get_current_user → get_db）会挂着一个 DB session 直到响应结束，对 SSE 就是
 永远 —— 40 条并发流足以耗尽连接池。这是上一轮修 SSE 时踩过的坑。
 
@@ -8,17 +15,23 @@
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.agent_v3.deps import get_service
+from app.agent_v3.deps import chat_rate_limiter, get_service, require_lock_backend
 from app.agent_v3.schemas import ChatRequest, ConfirmRequest, ThreadRequest
 from app.agent_v3.service import AgentV3Service
 from app.middleware.jwt_auth import get_current_user, get_current_user_stateless
 
 router = APIRouter()
+
+stream_router = APIRouter(
+    dependencies=[Depends(chat_rate_limiter), Depends(require_lock_backend)]
+)
 
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -33,11 +46,26 @@ def _sse(event: dict) -> str:
 
 
 async def _stream(request: Request, events):
-    """客户端断开就停 —— 别让图继续跑下去（尤其别继续跑写操作）。"""
-    async for event in events:
-        if await request.is_disconnected():
-            break
-        yield _sse(event)
+    """把 service 的事件流转成 SSE 帧；客户端断开就停下并关掉上游生成器。
+
+    为什么必须显式 `aclose()`：会话锁是在 service 的 `async with` 里持有的，
+    只有上游生成器被关闭才会释放。不显式关，就得等 GC 触发异步生成器的终结器 ——
+    时机不确定，而锁没释放的那个会话要到 TTL 到期才打得开。
+
+    这里能保证的是「停止推流，并尽快取消图运行」。**一次已经提交到数据库的写操作
+    撤不回来** —— 别把这条读成「断开能拦住写操作」。
+    """
+    try:
+        async for event in events:
+            if await request.is_disconnected():
+                break
+            yield _sse(event)
+    finally:
+        # 任务正被取消时，finally 里的 await 自己也会吃一个 CancelledError，
+        # aclose 就做不完了。shield 把清理放到独立任务上跑完；suppress 只吞
+        # 清理过程中的普通异常，取消本身照旧往外抛（那是正确的取消语义）。
+        with contextlib.suppress(Exception):
+            await asyncio.shield(events.aclose())
 
 
 @router.post("/conversations")
@@ -81,7 +109,7 @@ async def get_history(
         raise HTTPException(status_code=404, detail="conversation not found")
 
 
-@router.post("/chat")
+@stream_router.post("/chat")
 async def chat(
     req: ChatRequest,
     request: Request,
@@ -98,7 +126,7 @@ async def chat(
     )
 
 
-@router.post("/confirm")
+@stream_router.post("/confirm")
 async def confirm(
     req: ConfirmRequest,
     request: Request,

@@ -16,6 +16,10 @@ from app.database import AsyncSessionLocal
 from app.models.agent_v3 import AgentV3Conversation
 from stubs import EXECUTED, StubChatModel, wants
 
+# 本文件的测试都要 Redis：会话锁在 Redis 里（app/agent_v3/lock.py），限流也是。
+pytestmark = pytest.mark.usefixtures("redis_client")
+
+
 ACCOUNT = 900002
 OTHER_ACCOUNT = 900003
 USERNAME = "我"

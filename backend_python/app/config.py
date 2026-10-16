@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     agent_max_tool_turns: int = 8
     # Approximate context budget; older tool results get trimmed past this.
     agent_max_context_tokens: int = 12000
+    # Per-thread lock (app/agent_v3/lock.py). TTL must outlive one graph run --
+    # a single turn may call the model several times, each with
+    # agent_llm_timeout -- or the lock expires mid-run and two runs overlap.
+    agent_lock_ttl_seconds: int = 300
+    # How long a second run on the same thread waits for the lock before giving
+    # up. Long enough to queue behind a normal turn; finite so a wedged run
+    # cannot pile up requests forever.
+    agent_lock_wait_seconds: int = 120
 
     # Tell pydantic-settings to load from .env file
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
