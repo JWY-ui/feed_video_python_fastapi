@@ -54,7 +54,8 @@ class RedisClient:
     async def close(self):
         """Close connection."""
         if self._redis:
-            await self._redis.close()
+            # aclose() —— 底层客户端的 close() 从 redis-py 5.0.1 起已废弃
+            await self._redis.aclose()
             self._available = False
 
     # ==================== String operations (caching) ====================
