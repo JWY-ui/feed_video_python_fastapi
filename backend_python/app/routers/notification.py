@@ -52,7 +52,7 @@ async def notification_stream(request: Request,
     leak into access logs and browser history).
     """
     user_id = user["account_id"]
-    queue = notification_bus.subscribe(user_id)
+    subscription = await notification_bus.subscribe(user_id)
 
     async def event_generator():
         try:
@@ -61,12 +61,12 @@ async def notification_stream(request: Request,
                 if await request.is_disconnected():
                     break
                 try:
-                    data = await asyncio.wait_for(queue.get(), timeout=30)
+                    data = await asyncio.wait_for(subscription.queue.get(), timeout=30)
                     yield f"data: {json.dumps(data)}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            notification_bus.unsubscribe(user_id, queue)
+            await subscription.close()
 
     return StreamingResponse(
         event_generator(), media_type="text/event-stream",

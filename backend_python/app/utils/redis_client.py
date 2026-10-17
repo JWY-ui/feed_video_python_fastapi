@@ -13,6 +13,8 @@ Safe defaults:
   - incr() returns 1       -> rate limiter passes (doesn't block real requests)
   - zrevrange() returns [] -> feed degrades to MySQL
 """
+from __future__ import annotations
+
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -101,6 +103,57 @@ class RedisClient:
             return 0
         try:
             return await self._redis.delete(*keys)
+        except RedisError:
+            return 0
+
+    # ==================== Set operations ====================
+    # Used by the chunked-upload session (which chunk indices have landed).
+
+    async def sadd(self, key: str, *members: str, ex: int | None = None) -> int:
+        """SADD (+ optional EXPIRE). Returns 0 when Redis is unavailable."""
+        if not self._available:
+            return 0
+        try:
+            added = int(await self._redis.sadd(key, *members))
+            if ex:
+                await self._redis.expire(key, ex)
+            return added
+        except RedisError:
+            return 0
+
+    async def sismember(self, key: str, member: str) -> bool:
+        if not self._available:
+            return False
+        try:
+            return bool(await self._redis.sismember(key, member))
+        except RedisError:
+            return False
+
+    async def smembers(self, key: str) -> set[str]:
+        if not self._available:
+            return set()
+        try:
+            raw = await self._redis.smembers(key)
+            return {m.decode() if isinstance(m, bytes) else m for m in raw}
+        except RedisError:
+            return set()
+
+    # ==================== Pub/Sub ====================
+    # Used by the notification fan-out: every worker's SSE connection subscribes
+    # to the same per-user channel, so a push reaches the user regardless of
+    # which worker produced it.
+
+    def create_pubsub(self):
+        """Return a redis-py pubsub object, or None when Redis is unavailable."""
+        if not self._available or self._redis is None:
+            return None
+        return self._redis.pubsub()
+
+    async def publish(self, channel: str, message: str) -> int:
+        if not self._available:
+            return 0
+        try:
+            return int(await self._redis.publish(channel, message))
         except RedisError:
             return 0
 

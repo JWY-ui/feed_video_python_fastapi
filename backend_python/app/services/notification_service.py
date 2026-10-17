@@ -61,7 +61,7 @@ class NotificationService:
             target_id=target_id, content=content, created_at=now,
         )
 
-        notification_bus.publish(recipient_id, {
+        await notification_bus.publish(recipient_id, {
             # 'event' is the frame discriminator; the notification's own 'type'
             # (like/comment/...) would collide with it if used here.
             "event": "notification",
