@@ -84,13 +84,22 @@ class AgentV3Service:
             )
 
     async def delete_conversation(self, account_id: int, thread_id: str) -> None:
+        # 归属检查单独开一个短 session，不把连接挂在整个清理过程上。
         async with AsyncSessionLocal() as session:
-            repo = AgentV3Repository(session)
-            conv = await repo.get_conversation(thread_id)
+            conv = await AgentV3Repository(session).get_conversation(thread_id)
             if not conv or conv["account_id"] != account_id:
                 raise ValueError("conversation not found")
-            await repo.delete_conversation(thread_id)
-            await session.commit()
+
+        # 清理期间不能让同一会话的图运行继续写 checkpoint。
+        async with thread_lock(thread_id):
+            # 先删 checkpoint：消息是对话的唯一真相源，用户点了「删除」之后内容
+            # 不该还留在库里。业务行随后删；两步不在同一个事务里（checkpointer
+            # 有自己的连接池），所以先做不可逆的那一步，避免「业务行没了、历史
+            # 还在」这种更难处理的状态。
+            await self._graph.checkpointer.adelete_thread(thread_id)
+            async with AsyncSessionLocal() as session:
+                await AgentV3Repository(session).delete_conversation(thread_id)
+                await session.commit()
 
     async def get_history(self, account_id: int, thread_id: str) -> list[dict]:
         """从 checkpointer 读 transcript —— 它是消息的唯一真相源。"""

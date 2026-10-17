@@ -23,15 +23,18 @@ class VideoService:
     async def publish(self, author_id: int, username: str,
                       title: str, description: str,
                       play_url: str, cover_url: str) -> dict:
+        # One timestamp for both rows: the outbox dispatcher uses it as the
+        # timeline score, and it must match the video's create_time exactly.
+        now = datetime.now(timezone.utc)
         video_id = await self.repo.create(
             author_id=author_id, username=username,
             title=title.strip(), description=description.strip(),
             play_url=play_url.strip(), cover_url=cover_url.strip(),
-            create_time=datetime.now(timezone.utc),
+            create_time=now,
         )
         await self.repo.create_outbox_msg(
             video_id=video_id, event_type="video_published",
-            create_time=datetime.now(timezone.utc), status="pending",
+            create_time=now, status="pending",
         )
         tags = extract_tags(f"{title} {description}")
         for tag_name in tags:

@@ -7,7 +7,7 @@ from app.database import get_db
 from app.middleware.jwt_auth import get_current_user
 from app.repositories.like_repo import LikeRepository
 from app.repositories.video_repo import VideoRepository
-from app.schemas.like import LikeRequest, IsLikedResponse
+from app.schemas.like import IsLikedResponse, LikeRequest, ListMyLikedRequest
 from app.services.like_service import LikeService
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -49,7 +49,15 @@ async def is_liked(req: LikeRequest,
 
 
 @router.post("/listMyLikedVideos")
-async def list_my_liked_videos(current_user: dict = Depends(get_current_user),
+async def list_my_liked_videos(req: ListMyLikedRequest | None = None,
+                               current_user: dict = Depends(get_current_user),
                                service: LikeService = Depends(_get_like_service)):
-    videos = await service.list_liked_videos(current_user["account_id"])
-    return videos  # list of dicts, keys match Video schema
+    """Bare array, as before. Each item now also carries `like_id` + `liked_at`;
+    pass the last item's pair back to fetch the next page."""
+    req = req or ListMyLikedRequest()
+    return await service.list_liked_videos(
+        current_user["account_id"],
+        limit=req.limit,
+        before_time=req.before_time,
+        before_id=req.before_id,
+    )

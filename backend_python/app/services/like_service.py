@@ -98,6 +98,10 @@ class LikeService:
         """Check if current user already liked this video -- SELECT COUNT FROM likes WHERE ..."""
         return await self.repo.is_liked(video_id, account_id)
 
-    async def list_liked_videos(self, account_id: int) -> list[dict]:
+    async def list_liked_videos(self, account_id: int, limit: int = 200,
+                                before_time=None,
+                                before_id: int | None = None) -> list[dict]:
         """My liked videos list -- JOIN likes + videos, ordered by like time descending."""
-        return await self.repo.list_liked_videos(account_id)
+        return await self.repo.list_liked_videos(
+            account_id, limit=limit, before_time=before_time, before_id=before_id
+        )

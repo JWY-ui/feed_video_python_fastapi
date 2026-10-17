@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Like data access layer."""
-from sqlalchemy import select, func, delete
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,15 +65,36 @@ class LikeRepository:
         liked_ids = {row[0] for row in result.all()}
         return {vid: vid in liked_ids for vid in video_ids}
 
-    async def list_liked_videos(self, account_id: int) -> list[dict]:
+    async def list_liked_videos(self, account_id: int, limit: int = 200,
+                                before_time=None, before_id: int | None = None) -> list[dict]:
+        """My liked videos, keyset-paginated by (like.created_at, like.id).
+
+        The cursor is the previous page's last item; both parts are required so
+        videos liked in the same second cannot repeat or be skipped. `like_id`
+        and `liked_at` are returned on every item for the client to pass back.
+        """
         if account_id == 0:
             return []
         stmt = (
-            select(Video)
+            select(Video, Like.id.label("like_id"),
+                   Like.created_at.label("liked_at"))
             .join(Like, Like.video_id == Video.id)
             .where(Like.account_id == account_id)
-            .order_by(Like.created_at.desc())
-            .limit(200)
         )
-        result = await self.db.execute(stmt)
-        return [_video_to_dict(r) for r in result.scalars().all()]
+        if before_time is not None and before_id is not None:
+            stmt = stmt.where(
+                or_(
+                    Like.created_at < before_time,
+                    and_(Like.created_at == before_time, Like.id < before_id),
+                )
+            )
+        stmt = stmt.order_by(Like.created_at.desc(), Like.id.desc()).limit(limit)
+
+        rows = (await self.db.execute(stmt)).all()
+        items = []
+        for video, like_id, liked_at in rows:
+            item = _video_to_dict(video)
+            item["like_id"] = like_id
+            item["liked_at"] = as_utc(liked_at).isoformat() if liked_at else ""
+            items.append(item)
+        return items

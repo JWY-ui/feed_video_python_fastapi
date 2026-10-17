@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.agent_v3.deps import chat_rate_limiter, get_service, require_lock_backend
+from app.agent_v3.lock import LockTimeout, LockUnavailable
 from app.agent_v3.schemas import ChatRequest, ConfirmRequest, ThreadRequest
 from app.agent_v3.service import AgentV3Service
 from app.middleware.jwt_auth import get_current_user, get_current_user_stateless
@@ -94,6 +95,9 @@ async def delete_conversation(
         await service.delete_conversation(user["account_id"], req.thread_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="conversation not found")
+    except (LockUnavailable, LockTimeout) as e:
+        # 删除要拿会话锁（避免和进行中的图运行抢 checkpoint）。
+        raise HTTPException(status_code=503, detail=str(e))
     return {"message": "deleted"}
 
 

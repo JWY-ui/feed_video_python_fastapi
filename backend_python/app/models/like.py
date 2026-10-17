@@ -16,7 +16,7 @@ Used by queries:
 """
 from datetime import datetime
 
-from sqlalchemy import Integer, DateTime, UniqueConstraint
+from sqlalchemy import DateTime, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -35,5 +35,15 @@ class Like(Base):
     # utc_now, not func.now(): see app/utils/timeutil.py for the time convention.
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
-    # Compound unique: same user cannot like the same video twice.
-    __table_args__ = (UniqueConstraint("video_id", "account_id"),)
+    __table_args__ = (
+        # Compound unique: same user cannot like the same video twice.
+        # Its column order (video_id first) serves the "did this user like this
+        # video" / batch checks, but NOT "my liked videos".
+        UniqueConstraint("video_id", "account_id"),
+        # "My liked videos": WHERE account_id = ? ORDER BY created_at DESC, id DESC.
+        # The unique index above cannot serve it (wrong leading column) -- the
+        # dev DB EXPLAIN showed a full scan + filesort. InnoDB secondary indexes
+        # implicitly end with the primary key, so (account_id, created_at) also
+        # gives the (created_at, id) tiebreaker order without naming id.
+        Index("idx_likes_account_created", "account_id", created_at.desc()),
+    )

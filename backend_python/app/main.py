@@ -167,9 +167,18 @@ async def lifespan(app: FastAPI):
     else:
         print("agent_v3 disabled -- OPENAI_API_KEY not set (/agent/* returns 503)")
 
+    # Startup: outbox dispatcher -- turns pending outbox_msgs into timeline
+    # writes. Safe to run in every worker: rows are claimed with
+    # FOR UPDATE SKIP LOCKED, so they are processed once.
+    from app.services.outbox_dispatcher import run_forever as outbox_run
+
+    outbox_task = asyncio.create_task(outbox_run(), name="outbox-dispatcher")
+
     yield  # Application is running -- requests are processed after this line
 
     # Shutdown: clean up resources
+    outbox_task.cancel()
+    await asyncio.gather(outbox_task, return_exceptions=True)
     await agent_stack.aclose()
     await redis_client.close()
     await engine.dispose()
