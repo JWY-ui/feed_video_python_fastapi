@@ -32,6 +32,15 @@
 
 ## 方式一：Docker Compose（一条命令起全栈）
 
+先在 `backend_python/.env` 里填好必填项（Compose 会读取同一份文件；留空会直接启动失败）：
+
+```bash
+JWT_SECRET=<随机长字符串>
+MYSQL_ROOT_PASSWORD=<随机密码>
+REDIS_PASSWORD=<随机密码>
+OPENAI_API_KEY=<DeepSeek Key>   # 可选；不填时 /agent/* 返回 503
+```
+
 ```bash
 cd backend_python
 docker compose up -d --build
@@ -42,14 +51,13 @@ docker compose up -d --build
 | 服务 | 地址 | 说明 |
 |---|---|---|
 | 前端（Nginx） | http://localhost | 构建后的 Vue 产物 + `/api` 反代 |
-| 后端 | http://localhost:8080 | 接口与 `/docs` |
-| MySQL | localhost:3307 | 映射到容器内 3306 |
-| Redis | localhost:6378 | 映射到容器内 6379 |
+| 后端 | http://127.0.0.1:8080 | 接口与 `/docs`，只绑本机 |
+| MySQL | 127.0.0.1:3307 | 映射到容器内 3306，只绑本机 |
+| Redis | 127.0.0.1:6378 | 映射到容器内 6379，只绑本机 |
 
-> **注意**：`docker-compose.yml` 没有转发 `OPENAI_API_KEY`，所以容器里的
-> `/agent/*` 会返回 503（助手不配模型就不可用，没有降级模式）。
-> 要用助手，在 compose 的 `backend.environment` 里补上 `OPENAI_API_KEY` 和
-> `LLM_BASE_URL`，或在 `backend` 服务下加 `env_file: .env`。
+> 除前端外都只监听 `127.0.0.1`，公网访问统一走 Nginx 的 `/api` 反代。
+> `OPENAI_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL` / `CORS_ORIGINS` 都会转发进容器。
+> 后端以 `--proxy-headers` 启动，限流按真实客户端 IP 计数。
 
 ## 方式二：本地开发
 
@@ -332,7 +340,7 @@ JSON 只会更容易胡编；历史按 token 预算裁剪；并且**绝不产生
 
 | 层 | 选型 |
 |---|---|
-| 框架 | **FastAPI 0.119** + Uvicorn（全异步，单 worker） |
+| 框架 | **FastAPI 0.119** + Uvicorn（全异步；进程内状态已迁到 Redis，可多 worker，默认 1） |
 | 数据库 | **MySQL 8** / SQLAlchemy 2.0 async / **asyncmy** 驱动 / Alembic 未用（`create_all`） |
 | 缓存 | **Redis 7**（`redis[hiredis]`）—— 见下方"可选依赖"设计 |
 | 鉴权 | **python-jose**（JWT）+ **bcrypt 5** |
@@ -504,18 +512,21 @@ LIKE 通配符转义抽成 `escape_like`：**先转义反斜杠再转义 `%` / `
 —— 这是**断点续传**（注意：项目**没有实现真正的"秒传"**，即按 hash 直接命中已有文件跳过上传）。
 每片校验会话归属（403）、下标范围、重复片（409）、MD5（400）后才落盘。
 
-> **已知限制**：会话存在**进程内模块级字典**里，重启即丢、多 worker 不共享。生产化需挪到 Redis。
+> **会话状态存在 Redis**（`chunk:session:*` / `chunk:hash:*` / `chunk:chunks:*`，TTL 24h），
+> 分片文件本身仍在 `uploads/` 卷上。因此重启、多 worker 都能续传；Redis 不可用时这四个接口
+> 返回 503，而不是悄悄从头开始（否则可能把半截文件交给合并步骤）。
 
-### ⑫ 通知：为什么用进程内广播而不是 Redis
+### ⑫ 通知：Redis Pub/Sub 广播
 
-`notification_bus` 存在的理由是**分层**：通知要在点赞/评论/关注里发出，但不该让 service
-去 import router（会倒置依赖并循环 import）。所以中间放一个进程内的发布/订阅。
+`notification_bus` 仍然承担**分层**职责：通知要在点赞/评论/关注里发出，但不该让 service
+去 import router（会倒置依赖并循环 import）。
 
-投递是**尽力而为**：`put_nowait`，队列满就丢弃 —— 因为客户端重新加载时会从 MySQL
-重拉，丢一条推送不等于丢数据。
+实现是 Redis Pub/Sub：每个 worker 的 SSE 连接订阅 `feedsystem:notify:<user_id>`，
+生产者只负责 publish。这样用户无论连在哪个 worker 都能收到。
 
-> **已知限制**：进程内队列意味着多 worker 下发布只到同 worker 的连接。当前 Docker
-> 单 worker 所以成立；换 Redis Pub/Sub 时只需替换 `subscribe/publish/unsubscribe` 三个函数。
+投递仍是**尽力而为**：Pub/Sub 不持久化，无连接即无人接收，队列满就丢弃 —— 因为通知行
+先落 MySQL，客户端重新加载时会重拉，丢一条推送不等于丢数据。Redis 不可用时 publish
+是空操作，SSE 连接本身仍然可用（靠 keepalive 与客户端刷新）。
 
 ---
 
@@ -623,10 +634,12 @@ LIKE 通配符转义抽成 `escape_like`：**先转义反斜杠再转义 `%` / `
 - **限流在 Redis 不可用时完全失效**（见「后端亮点 ①」，实测 20 并发 0 拦截）；
 - **热门榜的 Redis 分钟窗口快照（`hot:video:1m:*` + `ZUNIONSTORE`）只有读路径、没有写入方**，
   所以实际每次都回退到 MySQL 三重游标 —— 设计在，链路是死的；
-- **`outbox_msgs` 只落地了存储半边**（发布视频时同事务写入），中继消费者未实现；
-- **分片上传会话存进程内存**，且没有真正的秒传；
-- **通知实时推送用进程内队列**，多 worker 下只有同 worker 能收到；
-- 整文件上传 `/video/uploadVideo` 是 `await file.read()` **一次性读进内存**（限 200MB）；
+- **outbox 派发器没有 attempts 列**：失败的行只按创建时间兜底（超过 24h 标记 `failed`），
+  毒消息最多重试 24 小时；
+- **分片上传没有真正的秒传**（不按 hash 直接复用已存在的文件）；
+- 上传（整文件与单个分片）都是 `await file.read()` **一次性读进内存**；
 - `/account/getProfile` 的视频数/获赞数统计是**硬编码 0**；
 - **没有数据库迁移工具**：建表全靠 SQLAlchemy `create_all`，它只建不改 —— 已有表的结构
   变更不会被应用，Model 字段改了需要手动 `ALTER` 或重建表。生产环境应换成 Alembic。
+- **单机部署**：Docker Compose 面向单台服务器；没有 K8s、没有多机负载均衡。
+  多 worker 已可用（会话状态在 Redis），但需要自己按 MySQL 连接数调整 worker 数量。

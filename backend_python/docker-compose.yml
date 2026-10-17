@@ -1,15 +1,37 @@
+# Production-oriented single-host deployment.
+#
+# Required secrets (put them in backend_python/.env, which is gitignored):
+#
+#   JWT_SECRET=<random long string>
+#   MYSQL_ROOT_PASSWORD=<random>
+#   REDIS_PASSWORD=<random>
+#   OPENAI_API_KEY=<deepseek key>          # optional; without it /agent/* 503s
+#
+# Optional:
+#   LLM_MODEL=deepseek-chat
+#   LLM_BASE_URL=https://api.deepseek.com/v1
+#   CORS_ORIGINS=https://your-domain.example   # default "*" (dev only)
+#   WEB_CONCURRENCY=2                          # workers; state is Redis-backed
+#   FORWARDED_ALLOW_IPS=*                      # trust the reverse proxy
+#
+# Ports other than the frontend are bound to 127.0.0.1: MySQL/Redis/backend are
+# not reachable from outside the host. The frontend (Nginx) proxies /api and
+# /static to the backend over the compose network.
+
 services:
   mysql:
     image: mysql:8.0
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
-      MYSQL_DATABASE: feedsystem
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-feedsystem}
     ports:
-      - "3307:3306"
+      # Local admin access only. The backend uses the compose network.
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -17,32 +39,43 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     ports:
-      - "6378:6379"
+      - "127.0.0.1:6378:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
 
   backend:
     build: .
+    restart: unless-stopped
     ports:
-      - "8080:8080"
-    restart: on-failure
+      - "127.0.0.1:8080:8080"
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD:-123456}
-      - MYSQL_DATABASE=feedsystem
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-feedsystem}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDIS_DB: ${REDIS_DB:-0}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      # Optional: without it the app boots but /agent/* returns 503.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
     depends_on:
       mysql:
         condition: service_healthy
@@ -50,15 +83,24 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
+    healthcheck:
+      # python is guaranteed in the image; curl is not.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   mysql_data:

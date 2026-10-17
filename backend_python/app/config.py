@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     # cannot pile up requests forever.
     agent_lock_wait_seconds: int = 120
 
+    # ---- Deployment ----
+    # Comma-separated browser origins allowed to call the API. "*" is the local
+    # dev default; a public deployment should list its frontend origin(s).
+    cors_origins: str = "*"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        raw = self.cors_origins.strip()
+        if not raw or raw == "*":
+            return ["*"]
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
     # Tell pydantic-settings to load from .env file
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

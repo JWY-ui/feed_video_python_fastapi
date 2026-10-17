@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.config import settings
 from app.database import engine, Base
 from app.utils.redis_client import redis_client
 
@@ -197,7 +198,9 @@ app = FastAPI(
 # Without CORS middleware, browsers block all cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       # Restrict to specific domains in production
+    # Defaults to "*" for local development. Set CORS_ORIGINS to a comma
+    # separated list (e.g. https://example.com) in production.
+    allow_origins=settings.cors_origin_list,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
