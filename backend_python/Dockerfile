@@ -5,7 +5,12 @@ WORKDIR /app
 
 # 先复制依赖文件（利用 Docker 缓存层）
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# pip 源：默认走清华镜像，国内服务器构建快很多。
+# 需要换源或回官方时：
+#   docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" -r requirements.txt
 
 # 再复制项目代码
 COPY . .
