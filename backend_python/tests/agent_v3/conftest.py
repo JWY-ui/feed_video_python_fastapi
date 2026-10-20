@@ -52,11 +52,10 @@ async def checkpointer():
 
     顺序与 app.main 的 lifespan 一致：setup() 建表 → 对齐排序规则。
     """
-    from app.agent_v3.checkpointer import ensure_checkpoint_collation
+    from app.agent_v3.checkpointer import checkpointer_saver, ensure_checkpoint_collation
     from app.agent_v3.deps import db_uri
-    from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
 
-    async with AsyncMySaver.from_conn_string(db_uri()) as saver:
+    async with checkpointer_saver(db_uri()) as saver:
         await saver.setup()
         await ensure_checkpoint_collation()
         yield saver

@@ -53,7 +53,7 @@ from app.routers.feed import protected_router as feed_protected_router
 from app.routers.message import router as message_router
 from app.routers.notification import router as notification_router
 from app.agent_v3 import deps as agent_deps
-from app.agent_v3.checkpointer import ensure_checkpoint_collation
+from app.agent_v3.checkpointer import checkpointer_saver, ensure_checkpoint_collation
 from app.agent_v3.graph import build_graph
 from app.agent_v3.router import router as agent_router
 from app.agent_v3.router import stream_router as agent_stream_router
@@ -140,10 +140,11 @@ async def lifespan(app: FastAPI):
     agent_stack = AsyncExitStack()
     if agent_deps.is_configured():
         try:
-            from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
-
+            # A pool, not a single connection: the saver's own from_conn_string()
+            # never reconnects, so one dropped MySQL connection breaks every
+            # checkpointer call until the process restarts. See checkpointer.py.
             saver = await agent_stack.enter_async_context(
-                AsyncMySaver.from_conn_string(agent_deps.db_uri())
+                checkpointer_saver(agent_deps.db_uri())
             )
             # setup() is async and idempotent (CREATE TABLE IF NOT EXISTS)
             await saver.setup()

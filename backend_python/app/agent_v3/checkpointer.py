@@ -20,6 +20,9 @@ checkpointer 使用、不与任何业务表 JOIN，所以对齐是安全的。
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 import asyncmy
 
 from app.config import settings
@@ -86,3 +89,39 @@ async def ensure_checkpoint_collation(database: str | None = None) -> list[str]:
             return stale
     finally:
         conn.close()
+
+
+# The saver's own `from_conn_string()` opens ONE connection and never reconnects:
+# if MySQL drops it (wait_timeout, container restart, network blip), every
+# checkpointer call fails with InterfaceError: (0, 'Not connected') until the
+# process is restarted. A pool hands out a fresh connection when the old one is
+# dead, and `pool_recycle` retires connections before the server times them out.
+CHECKPOINTER_POOL_SIZE = 10
+CHECKPOINTER_POOL_RECYCLE_SECONDS = 1800
+
+
+@asynccontextmanager
+async def checkpointer_saver(conn_string: str) -> AsyncIterator:
+    """Create an AsyncMySaver backed by an asyncmy connection pool.
+
+    Use this instead of `AsyncMySaver.from_conn_string(...)`.
+    """
+    from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
+
+    params = {
+        key: value
+        for key, value in AsyncMySaver.parse_conn_string(conn_string).items()
+        if value is not None
+    }
+    pool = await asyncmy.create_pool(
+        **params,
+        autocommit=True,
+        minsize=1,
+        maxsize=CHECKPOINTER_POOL_SIZE,
+        pool_recycle=CHECKPOINTER_POOL_RECYCLE_SECONDS,
+    )
+    try:
+        yield AsyncMySaver(conn=pool)
+    finally:
+        pool.close()
+        await pool.wait_closed()
